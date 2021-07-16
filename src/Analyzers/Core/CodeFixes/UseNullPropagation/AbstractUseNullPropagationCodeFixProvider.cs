@@ -74,6 +74,8 @@ namespace Microsoft.CodeAnalysis.UseNullPropagation
                 var whenPart = root.FindNode(diagnostic.AdditionalLocations[2].SourceSpan, getInnermostNodeForTie: true);
                 syntaxFacts.GetPartsOfConditionalExpression(
                     conditionalExpression, out var condition, out var whenTrue, out var whenFalse);
+                whenTrue = syntaxFacts.WalkDownParentheses(whenTrue);
+                whenFalse = syntaxFacts.WalkDownParentheses(whenFalse);
 
                 var whenPartIsNullable = diagnostic.Properties.ContainsKey(UseNullPropagationConstants.WhenPartIsNullable);
                 editor.ReplaceNode(conditionalExpression,
@@ -160,7 +162,7 @@ namespace Microsoft.CodeAnalysis.UseNullPropagation
         private class MyCodeAction : CustomCodeActions.DocumentChangeAction
         {
             public MyCodeAction(Func<CancellationToken, Task<Document>> createChangedDocument)
-                : base(AnalyzersResources.Use_null_propagation, createChangedDocument)
+                : base(AnalyzersResources.Use_null_propagation, createChangedDocument, nameof(AnalyzersResources.Use_null_propagation))
             {
             }
         }

@@ -63,7 +63,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             _typeParameters = typeParameters;
         }
 
-        protected override void MethodChecks(DiagnosticBag diagnostics)
+        protected override void MethodChecks(BindingDiagnosticBag diagnostics)
         {
             // TODO: move more functionality into here, making these symbols more lazy
         }
@@ -106,7 +106,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 if (_parameters.IsDefault)
                 {
-                    ImmutableInterlocked.InterlockedCompareExchange(ref _parameters, MakeParameters(), default(ImmutableArray<ParameterSymbol>));
+                    ImmutableInterlocked.InterlockedInitialize(ref _parameters, MakeParameters());
                 }
                 return _parameters;
             }

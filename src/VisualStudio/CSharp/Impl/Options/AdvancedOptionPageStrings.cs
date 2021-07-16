@@ -73,21 +73,23 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
         public static string Option_Show_hints_for_lambda_parameter_types
             => ServicesVSResources.Show_hints_for_lambda_parameter_types;
 
+        public static string Option_Show_hints_for_implicit_object_creation
+            => ServicesVSResources.Show_hints_for_implicit_object_creation;
+
         public static string Option_RenameTrackingPreview => CSharpVSResources.Show_preview_for_rename_tracking;
         public static string Option_Split_string_literals_on_enter => CSharpVSResources.Split_string_literals_on_enter;
 
         public static string Option_DisplayLineSeparators
             => CSharpVSResources.Show_procedure_line_separators;
 
+        public static string Option_Underline_reassigned_variables
+            => ServicesVSResources.Underline_reassigned_variables;
+
         public static string Option_DontPutOutOrRefOnStruct
-        {
-            get { return CSharpVSResources.Don_t_put_ref_or_out_on_custom_struct; }
-        }
+            => CSharpVSResources.Don_t_put_ref_or_out_on_custom_struct;
 
         public static string Option_EditorHelp
-        {
-            get { return CSharpVSResources.Editor_Help; }
-        }
+            => CSharpVSResources.Editor_Help;
 
         public static string Option_EnableHighlightKeywords
         {
@@ -261,5 +263,23 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
 
         public static SchemeName Color_Scheme_VisualStudio2017_Tag
             => SchemeName.VisualStudio2017;
+
+        public static string Option_Show_Remove_Unused_References_command_in_Solution_Explorer_experimental
+            => ServicesVSResources.Show_Remove_Unused_References_command_in_Solution_Explorer_experimental;
+
+        public static string Enable_all_features_in_opened_files_from_source_generators_experimental
+            => ServicesVSResources.Enable_all_features_in_opened_files_from_source_generators_experimental;
+
+        public static string Option_Enable_file_logging_for_diagnostics
+            => ServicesVSResources.Enable_file_logging_for_diagnostics;
+
+        public static string Option_Skip_analyzers_for_implicitly_triggered_builds
+            => ServicesVSResources.Skip_analyzers_for_implicitly_triggered_builds;
+
+        public static string Show_inheritance_margin
+            => ServicesVSResources.Show_inheritance_margin;
+
+        public static string Inheritance_Margin_experimental
+            => ServicesVSResources.Inheritance_Margin_experimental;
     }
 }

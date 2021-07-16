@@ -268,6 +268,33 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeStyle
             "csharp_style_implicit_object_creation_when_type_is_apparent",
             "TextEditor.CSharp.Specific.ImplicitObjectCreationWhenTypeIsApparent");
 
+        internal static readonly Option2<CodeStyleOption2<bool>> PreferNullCheckOverTypeCheck = CreateOption(
+            CSharpCodeStyleOptionGroups.ExpressionLevelPreferences, nameof(PreferNullCheckOverTypeCheck),
+            defaultValue: s_trueWithSuggestionEnforcement,
+            "csharp_style_prefer_null_check_over_type_check",
+            $"TextEditor.CSharp.Specific.{nameof(PreferNullCheckOverTypeCheck)}");
+
+        public static Option2<CodeStyleOption2<bool>> AllowEmbeddedStatementsOnSameLine { get; } = CreateOption(
+            CSharpCodeStyleOptionGroups.NewLinePreferences, nameof(AllowEmbeddedStatementsOnSameLine),
+            defaultValue: CodeStyleOptions2.TrueWithSilentEnforcement,
+            storageLocations: new OptionStorageLocation2[] {
+                EditorConfigStorageLocation.ForBoolCodeStyleOption("csharp_style_allow_embedded_statements_on_same_line_experimental", CodeStyleOptions2.TrueWithSilentEnforcement),
+                new RoamingProfileStorageLocation($"TextEditor.CSharp.Specific.{nameof(AllowEmbeddedStatementsOnSameLine)}")});
+
+        public static Option2<CodeStyleOption2<bool>> AllowBlankLinesBetweenConsecutiveBraces { get; } = CreateOption(
+            CSharpCodeStyleOptionGroups.NewLinePreferences, nameof(AllowBlankLinesBetweenConsecutiveBraces),
+            defaultValue: CodeStyleOptions2.TrueWithSilentEnforcement,
+            storageLocations: new OptionStorageLocation2[] {
+                EditorConfigStorageLocation.ForBoolCodeStyleOption("csharp_style_allow_blank_lines_between_consecutive_braces_experimental", CodeStyleOptions2.TrueWithSilentEnforcement),
+                new RoamingProfileStorageLocation($"TextEditor.CSharp.Specific.{nameof(AllowBlankLinesBetweenConsecutiveBraces)}")});
+
+        public static Option2<CodeStyleOption2<bool>> AllowBlankLineAfterColonInConstructorInitializer { get; } = CreateOption(
+            CSharpCodeStyleOptionGroups.NewLinePreferences, nameof(AllowBlankLineAfterColonInConstructorInitializer),
+            defaultValue: CodeStyleOptions2.TrueWithSilentEnforcement,
+            storageLocations: new OptionStorageLocation2[] {
+                EditorConfigStorageLocation.ForBoolCodeStyleOption("csharp_style_allow_blank_line_after_colon_in_constructor_initializer_experimental", CodeStyleOptions2.TrueWithSilentEnforcement),
+                new RoamingProfileStorageLocation($"TextEditor.CSharp.Specific.{nameof(AllowBlankLineAfterColonInConstructorInitializer)}")});
+
 #if false
 
         public static readonly Option2<CodeStyleOption2<bool>> VarElsewhere = CreateOption(
@@ -302,6 +329,8 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeStyle
             yield return PreferDeconstructedVariableDeclaration;
             yield return PreferIndexOperator;
             yield return PreferRangeOperator;
+            yield return AllowEmbeddedStatementsOnSameLine;
+            yield return AllowBlankLinesBetweenConsecutiveBraces;
         }
 
         public static IEnumerable<Option2<CodeStyleOption2<ExpressionBodyPreference>>> GetExpressionBodyOptions()
@@ -326,5 +355,6 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeStyle
         public static readonly OptionGroup CodeBlockPreferences = new(CSharpCompilerExtensionsResources.Code_block_preferences, priority: 6);
         public static readonly OptionGroup ExpressionLevelPreferences = new(CompilerExtensionsResources.Expression_level_preferences, priority: 7);
         public static readonly OptionGroup UsingDirectivePreferences = new(CSharpCompilerExtensionsResources.using_directive_preferences, priority: 8);
+        public static readonly OptionGroup NewLinePreferences = new(CompilerExtensionsResources.New_line_preferences, priority: 9);
     }
 }

@@ -1512,9 +1512,9 @@ class C
 }
 ";
             CreateCompilation(text).VerifyDiagnostics(
-                // (6,9): error CS0127: Since 'C.M1()' returns void, a return keyword must not be followed by an object expression
+                // (6,23): error CS0029: Cannot implicitly convert type '<throw expression>' to 'void'
                 //         return true ? throw null : M2();
-                Diagnostic(ErrorCode.ERR_RetNoObjectRequired, "return").WithArguments("C.M1()").WithLocation(6, 9));
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "throw null").WithArguments("<throw expression>", "void").WithLocation(6, 23));
         }
 
         [Fact, WorkItem(40405, "https://github.com/dotnet/roslyn/issues/40405")]
@@ -1532,9 +1532,9 @@ class C
 }
 ";
             CreateCompilation(text).VerifyDiagnostics(
-                // (6,42): error CS0029: Cannot implicitly convert type 'void' to 'object'
+                // (6,29): error CS0029: Cannot implicitly convert type '<throw expression>' to 'void'
                 //         object obj = true ? throw null : M2();
-                Diagnostic(ErrorCode.ERR_NoImplicitConv, "M2()").WithArguments("void", "object").WithLocation(6, 42));
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "throw null").WithArguments("<throw expression>", "void").WithLocation(6, 29));
         }
 
         [Fact, WorkItem(40405, "https://github.com/dotnet/roslyn/issues/40405")]
@@ -1573,12 +1573,9 @@ class C
 }
 ";
             CreateCompilation(text).VerifyDiagnostics(
-                // (6,29): error CS0029: Cannot implicitly convert type 'void' to 'object'
+                // (6,22): error CS0029: Cannot implicitly convert type 'void' to 'object'
                 //         object obj = true ? M2() : M2();
-                Diagnostic(ErrorCode.ERR_NoImplicitConv, "M2()").WithArguments("void", "object").WithLocation(6, 29),
-                // (6,36): error CS0029: Cannot implicitly convert type 'void' to 'object'
-                //         object obj = true ? M2() : M2();
-                Diagnostic(ErrorCode.ERR_NoImplicitConv, "M2()").WithArguments("void", "object").WithLocation(6, 36));
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "true ? M2() : M2()").WithArguments("void", "object").WithLocation(6, 22));
         }
 
         [Fact, WorkItem(40405, "https://github.com/dotnet/roslyn/issues/40405")]
@@ -2217,7 +2214,7 @@ interface I
     event System.Action E3 { add; remove; }
 }
 ";
-            CreateCompilation(text, parseOptions: TestOptions.Regular7, targetFramework: TargetFramework.NetStandardLatest).VerifyDiagnostics(
+            CreateCompilation(text, parseOptions: TestOptions.Regular7, targetFramework: TargetFramework.NetCoreApp).VerifyDiagnostics(
                 // (4,30): error CS8652: The feature 'default interface implementation' is not available in C# 7.0. Please use language version 8.0 or greater.
                 //     event System.Action E1 { add; }
                 Diagnostic(ErrorCode.ERR_FeatureNotAvailableInVersion7, "add").WithArguments("default interface implementation", "8.0").WithLocation(4, 30),
@@ -6534,9 +6531,9 @@ public class Square
                 // (21,16): error CS0172: Type of conditional expression cannot be determined because 'Square.Circle' and 'Square' implicitly convert to one another
                 //       var o1 = (1 == 1) ? aa : ii;   // CS0172
                 Diagnostic(ErrorCode.ERR_AmbigQM, "(1 == 1) ? aa : ii").WithArguments("Square.Circle", "Square").WithLocation(21, 16),
-                // (22,19): error CS8400: Feature 'target-typed conditional expression' is not available in C# 8.0. Please use language version 9.0 or greater.
+                // (22,19): error CS8957: Conditional expression is not valid in language version 8.0 because a common type was not found between 'Square.Circle' and 'Square'. To use a target-typed conversion, upgrade to language version 9.0 or greater.
                 //       object o2 = (1 == 1) ? aa : ii;   // CS8652
-                Diagnostic(ErrorCode.ERR_FeatureNotAvailableInVersion8, "(1 == 1) ? aa : ii").WithArguments("target-typed conditional expression", "9.0").WithLocation(22, 19)
+                Diagnostic(ErrorCode.ERR_NoImplicitConvTargetTypedConditional, "(1 == 1) ? aa : ii").WithArguments("8.0", "Square.Circle", "Square", "9.0").WithLocation(22, 19)
                 );
         }
 
@@ -9245,6 +9242,49 @@ class C1
                     // (13,30): error CS0266: Cannot implicitly convert type 'decimal' to 'int'. An explicit conversion exists (are you missing a cast?)
                     //         int[] arr6 = new int[z];// Invalid
                     Diagnostic(ErrorCode.ERR_NoImplicitConvCast, "z").WithArguments("decimal", "int").WithLocation(13, 30));
+        }
+
+        [Fact]
+        public void CS0266ERR_NoImplicitConvCast14()
+        {
+            string source = @"
+class C
+{
+    public unsafe void M(int* p, object o)
+    {
+        _ = p[o]; // error with span on 'o'
+        _ = p[0]; // ok
+    }
+}
+";
+            CreateCompilation(source, options: TestOptions.UnsafeDebugDll).VerifyDiagnostics(
+                // (6,15): error CS0266: Cannot implicitly convert type 'object' to 'int'. An explicit conversion exists (are you missing a cast?)
+                //         _ = p[o]; // error with span on 'o'
+                Diagnostic(ErrorCode.ERR_NoImplicitConvCast, "o").WithArguments("object", "int").WithLocation(6, 15));
+        }
+
+        [Fact]
+        public void CS0266ERR_NoImplicitConvCast15()
+        {
+            string source = @"
+class C
+{
+    public void M(object o)
+    {
+        int[o] x;
+    }
+}
+";
+            CreateCompilation(source).VerifyDiagnostics(
+                // (6,12): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //         int[o];
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[o]").WithLocation(6, 12),
+                // (6,13): error CS0266: Cannot implicitly convert type 'object' to 'int'. An explicit conversion exists (are you missing a cast?)
+                //         int[o];
+                Diagnostic(ErrorCode.ERR_NoImplicitConvCast, "o").WithArguments("object", "int").WithLocation(6, 13),
+                // (6,16): warning CS0168: The variable 'x' is declared but never used
+                //         int[o] x;
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "x").WithArguments("x").WithLocation(6, 16));
         }
 
         [Fact]
@@ -22626,6 +22666,7 @@ public class Program
         var z8 = new Func<string, string>(ref Program.BarP); 
         var z9 = new Func<string, string>(ref Program.Goo<string>(x => x));
         var z10 = new Func<string, string>(ref Id); // compat
+        var z11 = new Func<string, string>(ref new(x => x));
     }
 }";
             CreateCompilation(source).VerifyDiagnostics(
@@ -22646,7 +22687,11 @@ public class Program
                 Diagnostic(ErrorCode.ERR_RefProperty, "ref Program.BarP").WithArguments("Program.BarP").WithLocation(20, 43),
                 // (21,47): error CS1510: A ref or out argument must be an assignable variable
                 //         var z9 = new Func<string, string>(ref Program.Goo<string>(x => x));
-                Diagnostic(ErrorCode.ERR_RefLvalueExpected, "Program.Goo<string>(x => x)").WithLocation(21, 47));
+                Diagnostic(ErrorCode.ERR_RefLvalueExpected, "Program.Goo<string>(x => x)").WithLocation(21, 47),
+                // (23,48): error CS1510: A ref or out value must be an assignable variable
+                //         var z11 = new Func<string, string>(ref new(x => x));
+                Diagnostic(ErrorCode.ERR_RefLvalueExpected, "new(x => x)").WithLocation(23, 48)
+                );
 
             CreateCompilation(source, parseOptions: TestOptions.Regular.WithStrictFeature()).VerifyDiagnostics(
                 // (13,47): error CS0149: Method name expected
@@ -22678,7 +22723,11 @@ public class Program
                 Diagnostic(ErrorCode.ERR_RefLvalueExpected, "Program.Goo<string>(x => x)").WithLocation(21, 47),
                 // (22,48): error CS1657: Cannot pass 'Id' as a ref or out argument because it is a 'method group'
                 //         var z10 = new Func<string, string>(ref Id); // compat
-                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "Id").WithArguments("Id", "method group").WithLocation(22, 48));
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "Id").WithArguments("Id", "method group").WithLocation(22, 48),
+                // (23,48): error CS1510: A ref or out value must be an assignable variable
+                //         var z11 = new Func<string, string>(ref new(x => x));
+                Diagnostic(ErrorCode.ERR_RefLvalueExpected, "new(x => x)").WithLocation(23, 48)
+                );
         }
 
         [Fact, WorkItem(7359, "https://github.com/dotnet/roslyn/issues/7359")]
