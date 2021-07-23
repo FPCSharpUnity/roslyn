@@ -522,6 +522,39 @@ namespace Microsoft.CodeAnalysis
             return diagnosticInfo;
         }
 
+        /// Pure version of ReportDiagnostics
+        internal bool CheckIfDiagnosticsHasErrors(IEnumerable<Diagnostic> diagnostics)
+        {
+            foreach (var diag in diagnostics)
+            {
+                if (_reportedDiagnostics.Contains(diag))
+                {
+                    continue;
+                }
+                if (diag.Severity == DiagnosticSeverity.Hidden)
+                {
+                    continue;
+                }
+
+                if (diag.ProgrammaticSuppressionInfo != null)
+                {
+                    continue;
+                }
+
+                if (diag.IsSuppressed)
+                {
+                    continue;
+                }
+
+                if (diag.Severity == DiagnosticSeverity.Error)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>Returns true if there were any errors, false otherwise.</summary>
         internal bool ReportDiagnostics(IEnumerable<Diagnostic> diagnostics, TextWriter consoleOutput, ErrorLogger? errorLoggerOpt, Compilation? compilation)
         {
@@ -817,32 +850,43 @@ namespace Microsoft.CodeAnalysis
                 return Failed;
             }
 
-            RunCompilationExtensions(ref compilation, diagnostics, Arguments.BaseDirectory ?? "");
+            var compilationBeforeExtensions = compilation;
+
+            RunCompilationExtensions(ref compilation, diagnostics, Arguments.BaseDirectory ?? "", allowFileTransformations: true);
             if (ReportDiagnostics(diagnostics, consoleOutput, errorLogger, compilation)) return Failed;
 
             var additionalTexts = ImmutableArray<AdditionalText>.CastUp(additionalTextFiles);
-            CompileAndEmit(
-                touchedFilesLogger,
-                ref compilation,
-                analyzers,
-                generators,
-                additionalTexts,
-                analyzerConfigSet,
-                sourceFileAnalyzerConfigOptions,
-                embeddedTexts,
-                diagnostics,
-                cancellationToken,
-                out CancellationTokenSource? analyzerCts,
-                out bool reportAnalyzer,
-                out var analyzerDriver);
 
-            // At this point analyzers are already complete in which case this is a no-op.  Or they are 
-            // still running because the compilation failed before all of the compilation events were 
-            // raised.  In the latter case the driver, and all its associated state, will be waiting around 
-            // for events that are never coming.  Cancel now and let the clean up process begin.
-            if (analyzerCts != null)
+            compileAndEmit(ref compilation, diagnostics, out var reportAnalyzer, out var analyzerDriver);
+
+            if (CheckIfDiagnosticsHasErrors(diagnostics.AsEnumerable()))
             {
-                analyzerCts.Cancel();
+                // Try compiling without file transformations and print those errors.
+                // This makes much friendlier error messages, because it shows them on original files instead of
+                // transformed ones.
+                var currentCompilation = compilationBeforeExtensions;
+                var currentDiagnostics = DiagnosticBag.GetInstance();
+                try
+                {
+                    RunCompilationExtensions(
+                        ref currentCompilation, currentDiagnostics, Arguments.BaseDirectory ?? "",
+                        // We failed to compile with file transformations, try this time without them.
+                        allowFileTransformations: false
+                    );
+                    if (ReportDiagnostics(currentDiagnostics, consoleOutput, errorLogger, currentCompilation)) return Failed;
+                    compileAndEmit(ref currentCompilation, currentDiagnostics, out _, out _);
+                    if (CheckIfDiagnosticsHasErrors(currentDiagnostics.AsEnumerable()))
+                    {
+                        // If we had errors without transformations, then print them and finish the compilation.
+                        if (ReportDiagnostics(currentDiagnostics, consoleOutput, errorLogger, currentCompilation)) return Failed;
+                    }
+                    // If we did not have errors at this step then continue normally and print errors from full
+                    // compilation.
+                }
+                finally
+                {
+                    currentDiagnostics.Free();
+                }
             }
 
             var exitCode = ReportDiagnostics(diagnostics, consoleOutput, errorLogger, compilation)
@@ -867,10 +911,41 @@ namespace Microsoft.CodeAnalysis
             }
 
             return exitCode;
+            
+            void compileAndEmit(
+                ref Compilation? compilation, DiagnosticBag diagnostics, out bool reportAnalyzer, 
+                out AnalyzerDriver? analyzerDriver
+            )
+            {
+                CompileAndEmit(
+                    touchedFilesLogger,
+                    ref compilation,
+                    analyzers,
+                    generators,
+                    additionalTexts,
+                    analyzerConfigSet,
+                    sourceFileAnalyzerConfigOptions,
+                    embeddedTexts,
+                    diagnostics,
+                    cancellationToken,
+                    out CancellationTokenSource? analyzerCts,
+                    out reportAnalyzer,
+                    out analyzerDriver);
+
+                // At this point analyzers are already complete in which case this is a no-op.  Or they are 
+                // still running because the compilation failed before all of the compilation events were 
+                // raised.  In the latter case the driver, and all its associated state, will be waiting around 
+                // for events that are never coming.  Cancel now and let the clean up process begin.
+                if (analyzerCts != null)
+                {
+                    analyzerCts.Cancel();
+                }
+            }
         }
 
         private static void RunCompilationExtensions(
-            ref Compilation compilation, DiagnosticBag diagnosticBag, string baseDirectory
+            ref Compilation compilation, DiagnosticBag diagnosticBag, string baseDirectory, 
+            bool allowFileTransformations
         ) {
             var currentDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             var ceiType = typeof(IProcessCompilation);
@@ -889,7 +964,9 @@ namespace Microsoft.CodeAnalysis
                 try {
                     // Assembly.LoadFile does not load dependencies in dotnet
                     var assembly = Assembly.LoadFrom(assemblyPath);
-                    RunCompilationExtensions(assembly, ref compilation, diagnosticBag, ceiType, baseDirectory);
+                    RunCompilationExtensions(
+                        assembly, ref compilation, diagnosticBag, ceiType, baseDirectory, allowFileTransformations
+                    );
                 }
                 catch (Exception e) {
                     diagnosticBag.Add(ceiErr("CEI101", $"Error while loading assembly at {assemblyPath}: {e}"));
@@ -899,7 +976,7 @@ namespace Microsoft.CodeAnalysis
 
         static void RunCompilationExtensions(
             Assembly assembly, ref Compilation compilation, DiagnosticBag diagnosticBag, Type ceiType,
-            string baseDirectory
+            string baseDirectory, bool allowFileTransformations
         ) {
             try {
                 var hooks =
@@ -913,7 +990,9 @@ namespace Microsoft.CodeAnalysis
                     }
                     else if (instance is IProcessCompilation processCompilation) {
                         var objCompilation = (object)compilation;
-                        var untypedDiagnostics = processCompilation.process(ref objCompilation, baseDirectory);
+                        var untypedDiagnostics = processCompilation.process(
+                            ref objCompilation, baseDirectory, allowFileTransformations
+                        );
                         if (objCompilation is Compilation newCompilation) {
                             compilation = newCompilation;
                             var idx = 0;

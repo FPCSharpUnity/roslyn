@@ -12,6 +12,6 @@ namespace CompilationExtensionInterfaces
         /// </summary>
         /// <param name="compilation">Microsoft.CodeAnalysis.Compilation</param>
         /// <returns>IEnumerable&lt;Microsoft.CodeAnalysis.Diagnostic&gt;</returns>
-        IEnumerable<object> process(ref object compilation, string baseDirectory);
+        IEnumerable<object> process(ref object compilation, string baseDirectory, bool allowFileTransformations);
     }
 }
