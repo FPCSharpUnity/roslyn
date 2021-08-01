@@ -63,7 +63,8 @@ namespace Microsoft.CodeAnalysis.FindSymbols
             await _progress.OnStartedAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await using var _ = await _progressTracker.AddSingleItemAsync(cancellationToken).ConfigureAwait(false);
+                var disposable = await _progressTracker.AddSingleItemAsync(cancellationToken).ConfigureAwait(false);
+                await using var _ = disposable.ConfigureAwait(false);
 
                 // Create the initial set of symbols to search for.  As we walk the appropriate projects in the solution
                 // we'll expand this set as we dicover new symbols to search for in each project.
@@ -169,33 +170,46 @@ namespace Microsoft.CodeAnalysis.FindSymbols
 
         private async Task ProcessProjectAsync(Project project, ImmutableArray<ISymbol> allSymbols, CancellationToken cancellationToken)
         {
+            using var _1 = PooledDictionary<Document, PooledHashSet<ISymbol>>.GetInstance(out var documentToSymbols);
             try
             {
-                using var _1 = PooledHashSet<Document>.GetInstance(out var allDocuments);
                 foreach (var symbol in allSymbols)
                 {
                     foreach (var finder in _finders)
                     {
                         var documents = await finder.DetermineDocumentsToSearchAsync(
                             symbol, project, _documents, _options, cancellationToken).ConfigureAwait(false);
-                        allDocuments.AddRange(documents);
+
+                        foreach (var document in documents)
+                        {
+                            if (!documentToSymbols.TryGetValue(document, out var docSymbols))
+                            {
+                                docSymbols = PooledHashSet<ISymbol>.GetInstance();
+                                documentToSymbols.Add(document, docSymbols);
+                            }
+
+                            docSymbols.Add(symbol);
+                        }
                     }
                 }
 
                 using var _2 = ArrayBuilder<Task>.GetInstance(out var tasks);
-                foreach (var document in allDocuments)
-                    tasks.Add(CreateWorkAsync(() => ProcessDocumentAsync(document, allSymbols, cancellationToken), cancellationToken));
+                foreach (var (document, docSymbols) in documentToSymbols)
+                    tasks.Add(CreateWorkAsync(() => ProcessDocumentAsync(document, docSymbols, cancellationToken), cancellationToken));
 
                 await Task.WhenAll(tasks).ConfigureAwait(false);
             }
             finally
             {
+                foreach (var (_, symbols) in documentToSymbols)
+                    symbols.Free();
+
                 await _progressTracker.ItemCompletedAsync(cancellationToken).ConfigureAwait(false);
             }
         }
 
         private async Task ProcessDocumentAsync(
-            Document document, ImmutableArray<ISymbol> symbols, CancellationToken cancellationToken)
+            Document document, HashSet<ISymbol> symbols, CancellationToken cancellationToken)
         {
             await _progress.OnFindInDocumentStartedAsync(document, cancellationToken).ConfigureAwait(false);
 
