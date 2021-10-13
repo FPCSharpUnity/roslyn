@@ -58,7 +58,7 @@ namespace Microsoft.CodeAnalysis.Editor.Tagging
         /// Options controlling this tagger.  The tagger infrastructure will check this option
         /// against the buffer it is associated with to see if it should tag or not.
         /// 
-        /// An empty enumerable, or null, can be returned to indicate that this tagger should 
+        /// An empty enumerable can be returned to indicate that this tagger should 
         /// run unconditionally.
         /// </summary>
         protected virtual IEnumerable<Option2<bool>> Options => SpecializedCollections.EmptyEnumerable<Option2<bool>>();
@@ -201,7 +201,7 @@ namespace Microsoft.CodeAnalysis.Editor.Tagging
         private static int? GetCaretPosition(SnapshotPoint? caretPosition, SnapshotSpan snapshotSpan)
         {
             return caretPosition.HasValue && caretPosition.Value.Snapshot == snapshotSpan.Snapshot
-                ? caretPosition.Value.Position : (int?)null;
+                ? caretPosition.Value.Position : null;
         }
 
         protected virtual Task ProduceTagsAsync(TaggerContext<TTag> context, DocumentSnapshotSpan spanToTag, int? caretPosition)
