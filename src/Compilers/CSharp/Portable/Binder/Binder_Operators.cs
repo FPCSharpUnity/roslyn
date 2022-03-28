@@ -3865,14 +3865,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var rightConversion = Conversions.ClassifyImplicitConversionFromExpression(rightOperand, optLeftType0, ref useSiteInfo);
                 if (rightConversion.Exists)
                 {
-                    var leftPlaceholder = new BoundValuePlaceholder(leftOperand.Syntax, optLeftType).MakeCompilerGenerated();
-                    var leftConversion = CreateConversion(node, leftPlaceholder,
-                                                          Conversions.ClassifyConversionFromExpression(leftOperand, optLeftType0, ref useSiteInfo),
-                                                          isCast: false, conversionGroupOpt: null, optLeftType0, diagnostics);
+                    var leftPlaceholder = new BoundValuePlaceholder(leftOperand.Syntax, optLeftType0).MakeCompilerGenerated();
                     diagnostics.Add(node, useSiteInfo);
                     var convertedRightOperand = CreateConversion(rightOperand, rightConversion, optLeftType0, diagnostics);
+                    // Note: we use an identity conversion for LHS and let lowering get 'a0' from 'a' with GetValueOrDefault
                     return new BoundNullCoalescingOperator(node, leftOperand, convertedRightOperand,
-                        leftPlaceholder, leftConversion, BoundNullCoalescingOperatorResultKind.LeftUnwrappedType, optLeftType0);
+                        leftPlaceholder, leftConversion: leftPlaceholder, BoundNullCoalescingOperatorResultKind.LeftUnwrappedType, optLeftType0);
                 }
             }
 
@@ -4106,7 +4104,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 ErrorCode noCommonTypeError = hadMultipleCandidates ? ErrorCode.ERR_AmbigQM : ErrorCode.ERR_InvalidQM;
                 constantValue = FoldConditionalOperator(condition, trueExpr, falseExpr);
-                return new BoundUnconvertedConditionalOperator(node, condition, trueExpr, falseExpr, constantValue, noCommonTypeError, type: null, hasErrors: constantValue?.IsBad == true);
+                return new BoundUnconvertedConditionalOperator(node, condition, trueExpr, falseExpr, constantValue, noCommonTypeError, hasErrors: constantValue?.IsBad == true);
             }
 
             TypeSymbol type;

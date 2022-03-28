@@ -40,7 +40,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                 snapshotManagerOpt?.VerifyUpdatedSymbols();
 
                 // Can't just remove nodes from _analyzedNullabilityMap and verify no nodes remaining because nodes can be reused.
-                Debug.Assert(verifier._analyzedNullabilityMap.Count == verifier._visitedExpressions.Count, $"Visited {verifier._visitedExpressions.Count} nodes, expected to visit {verifier._analyzedNullabilityMap.Count}");
+                if (verifier._analyzedNullabilityMap.Count > verifier._visitedExpressions.Count)
+                {
+                    foreach (var analyzedNode in verifier._analyzedNullabilityMap.Keys)
+                    {
+                        if (!verifier._visitedExpressions.Contains(analyzedNode))
+                        {
+                            Debug.Assert(false, $"Analyzed {verifier._analyzedNullabilityMap.Count} nodes in NullableWalker, but DebugVerifier expects {verifier._visitedExpressions.Count}. Example of unanalyzed node: {analyzedNode.GetDebuggerDisplay()}");
+                        }
+                    }
+                }
+
+                Debug.Assert(verifier._analyzedNullabilityMap.Count == verifier._visitedExpressions.Count, $"Analyzed {verifier._analyzedNullabilityMap.Count} nodes in NullableWalker, but DebugVerifier expects {verifier._visitedExpressions.Count}.");
             }
 
             private void VerifyExpression(BoundExpression expression, bool overrideSkippedExpression = false)
@@ -169,11 +180,6 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             public override BoundNode? VisitBinaryOperator(BoundBinaryOperator node)
             {
-                if (node.InterpolatedStringHandlerData is { } data)
-                {
-                    Visit(data.Construction);
-                }
-
                 VisitBinaryOperatorChildren(node);
                 return null;
             }
@@ -246,31 +252,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return null;
             }
 
-            public override BoundNode? VisitNoPiaObjectCreationExpression(BoundNoPiaObjectCreationExpression node)
-            {
-                // We're not handling nopia object creations correctly
-                // https://github.com/dotnet/roslyn/issues/45082
-                if (node.InitializerExpressionOpt is object)
-                {
-                    VerifyExpression(node.InitializerExpressionOpt, overrideSkippedExpression: true);
-                }
-                return null;
-            }
-
             public override BoundNode? VisitUnconvertedObjectCreationExpression(BoundUnconvertedObjectCreationExpression node)
             {
                 // These nodes are only involved in return type inference for unbound lambdas. We don't analyze their subnodes, and no
                 // info is exposed to consumers.
-                return null;
-            }
-
-            public override BoundNode? VisitInterpolatedString(BoundInterpolatedString node)
-            {
-                if (node.InterpolationData is { Construction: var construction })
-                {
-                    Visit(construction);
-                }
-                base.VisitInterpolatedString(node);
                 return null;
             }
 
@@ -280,6 +265,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                 Visit(node.Argument);
                 Visit(node.IndexerOrSliceAccess);
                 return null;
+            }
+
+            public override BoundNode? VisitConversion(BoundConversion node)
+            {
+                if (node.ConversionKind == ConversionKind.InterpolatedStringHandler)
+                {
+                    Visit(node.Operand.GetInterpolatedStringHandlerData().Construction);
+                }
+
+                return base.VisitConversion(node);
             }
         }
 #endif
