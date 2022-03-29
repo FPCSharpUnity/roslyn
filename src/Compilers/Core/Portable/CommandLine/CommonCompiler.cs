@@ -900,12 +900,44 @@ namespace Microsoft.CodeAnalysis
 
             var compilationBeforeExtensions = compilation;
 
+            var mapping = createMapping();
+
+            // By default, compiler connects SyntaxTree with AnalyzerConfigOptionsResult by index. But we add more
+            // syntax trees, so we need to map by path.
+            ImmutableDictionary<string, AnalyzerConfigOptionsResult> createMapping()
+            {
+                if (sourceFileAnalyzerConfigOptions.IsDefault)
+                    return ImmutableDictionary<string, AnalyzerConfigOptionsResult>.Empty;
+
+                var mappingBuilder = ImmutableDictionary.CreateBuilder<string, AnalyzerConfigOptionsResult>();
+
+                var trees = compilationBeforeExtensions.SyntaxTrees.ToArray();
+                for (int i = 0; i < trees.Length; i++)
+                {
+                    mappingBuilder.Add(trees[i].FilePath, sourceFileAnalyzerConfigOptions[i]);
+                }
+
+                return mappingBuilder.ToImmutable();
+            }
+
             RunCompilationExtensions(ref compilation, diagnostics, Arguments.BaseDirectory ?? "", allowFileTransformations: true);
             if (ReportDiagnostics(diagnostics, consoleOutput, errorLogger, compilation)) return Failed;
 
+            ImmutableArray<AnalyzerConfigOptionsResult> useMapping(Compilation compilation)
+            {
+                if (mapping.IsEmpty) return ImmutableArray<AnalyzerConfigOptionsResult>.Empty;
+                return compilation.SyntaxTrees.Select(
+                    tree =>
+                    {
+                        if (mapping.TryGetValue(tree.FilePath, out var result)) return result;
+                        return globalConfigOptions;
+                    }
+                ).ToImmutableArray();
+            }
+
             var additionalTexts = ImmutableArray<AdditionalText>.CastUp(additionalTextFiles);
 
-            compileAndEmit(ref compilation, diagnostics, out var reportAnalyzer, out var analyzerDriver);
+            compileAndEmit(ref compilation, diagnostics, out var reportAnalyzer, out var analyzerDriver, useMapping(compilation));
 
             if (CheckIfDiagnosticsHasErrors(diagnostics.AsEnumerable()))
             {
@@ -922,7 +954,7 @@ namespace Microsoft.CodeAnalysis
                         allowFileTransformations: false
                     );
                     if (ReportDiagnostics(currentDiagnostics, consoleOutput, errorLogger, currentCompilation)) return Failed;
-                    compileAndEmit(ref currentCompilation, currentDiagnostics, out _, out _);
+                    compileAndEmit(ref currentCompilation, currentDiagnostics, out _, out _, useMapping(currentCompilation));
                     if (CheckIfDiagnosticsHasErrors(currentDiagnostics.AsEnumerable()))
                     {
                         // If we had errors without transformations, then print them and finish the compilation.
@@ -961,8 +993,9 @@ namespace Microsoft.CodeAnalysis
             return exitCode;
             
             void compileAndEmit(
-                ref Compilation? compilation, DiagnosticBag diagnostics, out bool reportAnalyzer, 
-                out AnalyzerDriver? analyzerDriver
+                ref Compilation? compilation, DiagnosticBag diagnostics, out bool reportAnalyzer,
+                out AnalyzerDriver? analyzerDriver,
+                ImmutableArray<AnalyzerConfigOptionsResult> analyzerConfigOptionsResults
             )
             {
                 CompileAndEmit(
@@ -972,7 +1005,7 @@ namespace Microsoft.CodeAnalysis
                     generators,
                     additionalTexts,
                     analyzerConfigSet,
-                    sourceFileAnalyzerConfigOptions,
+                    analyzerConfigOptionsResults,
                     embeddedTexts,
                     diagnostics,
                     cancellationToken,
@@ -1102,7 +1135,6 @@ namespace Microsoft.CodeAnalysis
             int i = 0;
             foreach (var syntaxTree in syntaxTrees)
             {
-
                 var options = sourceFileAnalyzerConfigOptions[i].AnalyzerOptions;
 
                 // Optimization: don't create a bunch of entries pointing to a no-op
