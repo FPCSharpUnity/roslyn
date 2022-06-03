@@ -1224,6 +1224,12 @@ namespace Microsoft.CodeAnalysis
 
                 if (!generators.IsEmpty)
                 {
+                    // !!!!!! EDITS !!!!!!
+                    // This code uses a weird way to detect new files after code generation.
+                    // It broke after we inserted our own generator.
+                    // But I fixed it by storing the number of file just before code generation and using that.
+                    var syntaxTreeCountBeforeGeneration = compilation.SyntaxTrees.Count();
+
                     // At this point we have a compilation with nothing yet computed. 
                     // We pass it to the generators, which will realize any symbols they require. 
                     compilation = RunGenerators(compilation, Arguments.ParseOptions, generators, analyzerConfigProvider, additionalTextFiles, diagnostics);
@@ -1231,7 +1237,7 @@ namespace Microsoft.CodeAnalysis
                     bool hasAnalyzerConfigs = !Arguments.AnalyzerConfigPaths.IsEmpty;
                     bool hasGeneratedOutputPath = !string.IsNullOrWhiteSpace(Arguments.GeneratedFilesOutputDirectory);
 
-                    var generatedSyntaxTrees = compilation.SyntaxTrees.Skip(Arguments.SourceFiles.Length).ToList();
+                    var generatedSyntaxTrees = compilation.SyntaxTrees.Skip(syntaxTreeCountBeforeGeneration).ToList();
 
                     var analyzerOptionsBuilder = hasAnalyzerConfigs ? ArrayBuilder<AnalyzerConfigOptionsResult>.GetInstance(generatedSyntaxTrees.Count) : null;
                     var embeddedTextBuilder = ArrayBuilder<EmbeddedText>.GetInstance(generatedSyntaxTrees.Count);
