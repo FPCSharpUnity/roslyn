@@ -920,7 +920,14 @@ namespace Microsoft.CodeAnalysis
                 return mappingBuilder.ToImmutable();
             }
 
-            RunCompilationExtensions(ref compilation, diagnostics, Arguments.BaseDirectory ?? "", allowFileTransformations: true);
+            RunCompilationExtensions(
+                ref compilation, 
+                diagnostics, 
+                Arguments.BaseDirectory ?? "", 
+                allowFileTransformations: true,
+                generators
+            );
+            
             if (ReportDiagnostics(diagnostics, consoleOutput, errorLogger, compilation)) return Failed;
 
             ImmutableArray<AnalyzerConfigOptionsResult> useMapping(Compilation compilation)
@@ -951,7 +958,8 @@ namespace Microsoft.CodeAnalysis
                     RunCompilationExtensions(
                         ref currentCompilation, currentDiagnostics, Arguments.BaseDirectory ?? "",
                         // We failed to compile with file transformations, try this time without them.
-                        allowFileTransformations: false
+                        allowFileTransformations: false,
+                        generators
                     );
                     if (ReportDiagnostics(currentDiagnostics, consoleOutput, errorLogger, currentCompilation)) return Failed;
                     compileAndEmit(ref currentCompilation, currentDiagnostics, out _, out _, useMapping(currentCompilation));
@@ -1025,95 +1033,36 @@ namespace Microsoft.CodeAnalysis
         }
 
         private static void RunCompilationExtensions(
-            ref Compilation compilation, DiagnosticBag diagnosticBag, string baseDirectory, 
-            bool allowFileTransformations
+            ref Compilation compilation, DiagnosticBag diagnosticBag, string baseDirectory,
+            bool allowFileTransformations, ImmutableArray<ISourceGenerator> generators
         ) {
-            var currentDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var ceiType = typeof(IProcessCompilation);
-            const string PATTERN = "CompilationExtension*.dll";
-            diagnosticBag.Add(ceiInfo(
-                "CEI102", 
-                $"Looking for '{PATTERN}' in '{currentDirectory}' that has classes with parameterless constructor " +
-                $"implementing '{ceiType.FullName}'."
-            ));
-            var ceiAssemblyPath = Path.GetFullPath(ceiType.Assembly.Location);
-            var assemblyPaths = 
-                Directory.GetFiles(currentDirectory, PATTERN)
-                .Where(path => Path.GetFullPath(path) != ceiAssemblyPath);
-            foreach (var assemblyPath in assemblyPaths) {
-                diagnosticBag.Add(ceiInfo("CEI103", $"Found DLL: {assemblyPath}"));
+            var compilationProcessors = generators.OfType<ProcessCompilationBase>().ToArray();
+            addDiagnostic(
+                ceiInfo(
+                    "CEI101",
+                    $"Found {generators.Length} generators of which {compilationProcessors} are {nameof(ProcessCompilationBase)}"
+                )
+            );
+            foreach (var processCompilation in compilationProcessors)
+            {
                 try {
-                    // Assembly.LoadFile does not load dependencies in dotnet
-                    var assembly = Assembly.LoadFrom(assemblyPath);
-                    RunCompilationExtensions(
-                        assembly, ref compilation, diagnosticBag, ceiType, baseDirectory, allowFileTransformations
+                    addDiagnostic(
+                        ceiInfo(
+                            "CEI102",
+                            $"Running generator: {processCompilation.GetType().FullName}"
+                        )
                     );
+                    var diagnostics = processCompilation.process(ref compilation, baseDirectory, allowFileTransformations);
+                    diagnosticBag.AddRange(diagnostics);
                 }
                 catch (Exception e) {
-                    diagnosticBag.Add(ceiErr("CEI101", $"Error while loading assembly at {assemblyPath}: {e}"));
+                    addDiagnostic(ceiErr("CEI001", $"Exception processing {processCompilation.GetType().FullName}: {e}"));
                 }
             }
-        }
-
-        static void RunCompilationExtensions(
-            Assembly assembly, ref Compilation compilation, DiagnosticBag diagnosticBag, Type ceiType,
-            string baseDirectory, bool allowFileTransformations
-        ) {
-            try {
-                var hooks =
-                    assembly.DefinedTypes
-                        .Where(t => t.ImplementedInterfaces.Contains(ceiType))
-                        .ToArray();
-                foreach (var hook in hooks) {
-                    var instance = Activator.CreateInstance(hook);
-                    if (instance == null) {
-                        addErr(ceiErr("CEI001", $"Can't create hook {hook.FullName} with parameterless constructor"));
-                    }
-                    else if (instance is IProcessCompilation processCompilation) {
-                        var objCompilation = (object)compilation;
-                        var untypedDiagnostics = processCompilation.process(
-                            ref objCompilation, baseDirectory, allowFileTransformations
-                        );
-                        if (objCompilation is Compilation newCompilation) {
-                            compilation = newCompilation;
-                            var idx = 0;
-                            foreach (var untypedDiagnostic in untypedDiagnostics) {
-                                if (untypedDiagnostic is Diagnostic diagnostic) {
-                                    addErr(diagnostic);
-                                }
-                                else {
-                                    addErr(ceiErr(
-                                        "CEI004",
-                                        $"Hook {hook.FullName} returned not Diagnostic at index {idx} " +
-                                        $"but {untypedDiagnostic.GetType().FullName}"
-                                    ));
-                                }
-
-                                idx++;
-                            }
-                        }
-                        else {
-                            addErr(ceiErr(
-                                "CEI003",
-                                $"Hook {hook.FullName} returned not Compilation but {objCompilation.GetType().FullName}"
-                            ));
-                        }
-                    }
-                    else {
-                        addErr(ceiErr(
-                            "CEI004",
-                            $"Hook {hook.FullName} returned not IProcessCompilation but {instance.GetType().FullName}"
-                        ));
-                    }
-                }
-            }
-            catch (Exception e) {
-                addErr(ceiErr("CEI005", $"Exception processing {assembly}: {e}"));
-            }
-
-            void addErr(Diagnostic diagnostic) => diagnosticBag.Add(diagnostic);
-        } 
             
+            void addDiagnostic(Diagnostic diagnostic) => diagnosticBag.Add(diagnostic);
+        }
+        
         static Diagnostic ceiErr(string code, string msg, Location location = null) =>
             Diagnostic.Create(new DiagnosticDescriptor(
                 code, "Error", msg, "CompilationExtensionInterfaces", DiagnosticSeverity.Error, true
