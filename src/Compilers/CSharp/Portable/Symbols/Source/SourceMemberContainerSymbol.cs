@@ -59,7 +59,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             private const int NullableContextSize = 3;
 
             private const int HasDeclaredRequiredMembersOffset = NullableContextOffset + NullableContextSize;
-            private const int HasDeclaredRequiredMembersSize = 2;
+            //private const int HasDeclaredRequiredMembersSize = 2;
 
             private const int SpecialTypeMask = (1 << SpecialTypeSize) - 1;
             private const int ManagedKindMask = (1 << ManagedKindSize) - 1;
@@ -395,12 +395,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     // It is an error for the same modifier to appear multiple times.
                     if (!modifierErrors)
                     {
-                        var info = ModifierUtils.CheckAccessibility(mods, this, isExplicitInterfaceImplementation: false);
-                        if (info != null)
-                        {
-                            diagnostics.Add(info, this.Locations[0]);
-                            modifierErrors = true;
-                        }
+                        modifierErrors = ModifierUtils.CheckAccessibility(mods, this, isExplicitInterfaceImplementation: false, diagnostics, Locations[0]);
                     }
                 }
 
