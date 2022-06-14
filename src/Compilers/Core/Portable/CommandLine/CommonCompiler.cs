@@ -14,7 +14,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
-using CompilationExtensionInterfaces;
+using CompilationExtension;
 using Microsoft.CodeAnalysis.Collections;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Emit;
@@ -1040,7 +1040,7 @@ namespace Microsoft.CodeAnalysis
             addDiagnostic(
                 ceiInfo(
                     "CEI101",
-                    $"Found {generators.Length} generators of which {compilationProcessors} are {nameof(ProcessCompilationBase)}"
+                    $"Found {generators.Length} generators of which {compilationProcessors.Length} are {nameof(ProcessCompilationBase)}"
                 )
             );
             foreach (var processCompilation in compilationProcessors)
@@ -1052,8 +1052,9 @@ namespace Microsoft.CodeAnalysis
                             $"Running generator: {processCompilation.GetType().FullName}"
                         )
                     );
-                    var diagnostics = processCompilation.process(ref compilation, baseDirectory, allowFileTransformations);
-                    diagnosticBag.AddRange(diagnostics);
+                    var tpl = processCompilation.process(compilation, generators, baseDirectory, allowFileTransformations);
+                    diagnosticBag.AddRange(tpl.diagnostics);
+                    compilation = tpl.newCompilation;
                 }
                 catch (Exception e) {
                     addDiagnostic(ceiErr("CEI001", $"Exception processing {processCompilation.GetType().FullName}: {e}"));
