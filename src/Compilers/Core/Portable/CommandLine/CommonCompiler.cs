@@ -953,7 +953,7 @@ namespace Microsoft.CodeAnalysis
 
             var additionalTexts = ImmutableArray<AdditionalText>.CastUp(additionalTextFiles);
 
-            compileAndEmit(ref compilation, diagnostics, out var reportAnalyzer, out var analyzerDriver, useMapping(compilation));
+            compileAndEmit(ref compilation, diagnostics, out var analyzerDriver, out var driverTimingInfo, useMapping(compilation));
 
             if (CheckIfDiagnosticsHasErrors(diagnostics.AsEnumerable()))
             {
@@ -1007,10 +1007,11 @@ namespace Microsoft.CodeAnalysis
             }
 
             return exitCode;
-            
+
             void compileAndEmit(
-                ref Compilation? compilation, DiagnosticBag diagnostics, out bool reportAnalyzer,
+                ref Compilation? compilation, DiagnosticBag diagnostics,
                 out AnalyzerDriver? analyzerDriver,
+                out GeneratorDriverTimingInfo? driverTimingInfo,
                 ImmutableArray<AnalyzerConfigOptionsResult> analyzerConfigOptionsResults
             )
             {
@@ -1026,8 +1027,8 @@ namespace Microsoft.CodeAnalysis
                     diagnostics,
                     cancellationToken,
                     out CancellationTokenSource? analyzerCts,
-                    out reportAnalyzer,
-                    out analyzerDriver);
+                    out analyzerDriver,
+                    out driverTimingInfo);
 
                 // At this point analyzers are already complete in which case this is a no-op.  Or they are 
                 // still running because the compilation failed before all of the compilation events were 
