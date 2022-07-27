@@ -176,7 +176,7 @@ namespace Microsoft.CodeAnalysis.Diagnostics
 
         public const string ForEachCastDiagnosticId = "IDE0220";
 
-        public const string UseUTF8StringLiteralDiagnosticId = "IDE0230";
+        public const string UseUtf8StringLiteralDiagnosticId = "IDE0230";
 
         public const string RemoveRedundantNullableDirectiveDiagnosticId = "IDE0240";
         public const string RemoveUnnecessaryNullableDirectiveDiagnosticId = "IDE0241";
@@ -185,7 +185,7 @@ namespace Microsoft.CodeAnalysis.Diagnostics
         public const string AnalyzerChangedId = "IDE1001";
         public const string AnalyzerDependencyConflictId = "IDE1002";
         public const string MissingAnalyzerReferenceId = "IDE1003";
-        public const string ErrorReadingRulesetId = "IDE1004";
+        // public const string ErrorReadingRulesetId = "IDE1004";
         public const string InvokeDelegateWithConditionalAccessId = "IDE1005";
         public const string NamingRuleId = "IDE1006";
         public const string UnboundIdentifierId = "IDE1007";

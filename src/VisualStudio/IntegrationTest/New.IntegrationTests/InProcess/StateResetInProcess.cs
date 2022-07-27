@@ -10,18 +10,17 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Completion;
 using Microsoft.CodeAnalysis.Editor.Options;
 using Microsoft.CodeAnalysis.Editor.Shared.Options;
-using Microsoft.CodeAnalysis.MetadataAsSource;
 using Microsoft.CodeAnalysis.Host;
+using Microsoft.CodeAnalysis.MetadataAsSource;
 using Microsoft.CodeAnalysis.Options;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Extensibility.Testing;
 using Microsoft.VisualStudio.IntegrationTest.Utilities;
-using Microsoft.VisualStudio.IntegrationTest.Utilities.Input;
 using Microsoft.VisualStudio.LanguageServices;
 using Microsoft.VisualStudio.LanguageServices.Implementation;
-using Microsoft.VisualStudio.LanguageServices.Telemetry;
 using Microsoft.VisualStudio.Shell.Interop;
 using Microsoft.VisualStudio.Text.Editor;
+using WindowsInput.Native;
 
 namespace Roslyn.VisualStudio.IntegrationTests.InProcess
 {
@@ -46,7 +45,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.InProcess
             var globalOptions = await GetComponentModelServiceAsync<IGlobalOptionService>(cancellationToken);
             ResetOption(globalOptions, MetadataAsSourceOptionsStorage.NavigateToDecompiledSources);
             ResetOption(globalOptions, WorkspaceConfigurationOptionsStorage.EnableOpeningSourceGeneratedFilesInWorkspace);
-            ResetPerLanguageOption(globalOptions, NavigationBarViewOptions.ShowNavigationBar);
+            ResetPerLanguageOption(globalOptions, NavigationBarViewOptionsStorage.ShowNavigationBar);
             ResetPerLanguageOption(globalOptions, VisualStudioNavigationOptions.NavigateToObjectBrowser);
             ResetPerLanguageOption(globalOptions, FeatureOnOffOptions.AddImportsOnPaste);
             ResetPerLanguageOption(globalOptions, FeatureOnOffOptions.PrettyListing);
@@ -95,7 +94,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.InProcess
                     break;
                 }
 
-                await TestServices.Input.SendWithoutActivateAsync(VirtualKey.Escape);
+                await TestServices.Input.SendWithoutActivateAsync(VirtualKeyCode.ESCAPE);
                 var nextModalWindow = IntegrationHelper.GetModalWindowFromParentWindow(mainWindow);
                 if (nextModalWindow == modalWindow)
                 {
