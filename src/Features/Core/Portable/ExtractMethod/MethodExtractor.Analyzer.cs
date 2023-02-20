@@ -9,7 +9,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.LanguageServices;
+using Microsoft.CodeAnalysis.LanguageService;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Roslyn.Utilities;
@@ -252,7 +252,7 @@ namespace Microsoft.CodeAnalysis.ExtractMethod
                     var parameters = MarkVariableInfoToUseAsReturnValueIfPossible(GetMethodParameters(variableInfoMap.Values));
                     var variableToUseAsReturnValue = parameters.FirstOrDefault(v => v.UseAsReturnValue);
                     var returnType = variableToUseAsReturnValue != null
-                        ? variableToUseAsReturnValue.GetVariableType(_semanticDocument)
+                        ? variableToUseAsReturnValue.GetVariableType()
                         : compilation.GetSpecialType(SpecialType.System_Void);
 
                     var unsafeAddressTakenUsed = ContainsVariableUnsafeAddressTaken(dataFlowAnalysisData, variableInfoMap.Keys);
@@ -613,7 +613,7 @@ namespace Microsoft.CodeAnalysis.ExtractMethod
 
             private static bool UserDefinedValueType(Compilation compilation, ITypeSymbol type)
             {
-                if (!type.IsValueType || type.IsPointerType() || type.IsEnumType())
+                if (!type.IsValueType || type is IPointerTypeSymbol || type.IsEnumType())
                 {
                     return false;
                 }

@@ -6,7 +6,10 @@ using System.Runtime.Serialization;
 using Microsoft.CodeAnalysis.CodeCleanup;
 using Microsoft.CodeAnalysis.CodeGeneration;
 using Microsoft.CodeAnalysis.CodeStyle;
+
+#if !CODE_STYLE
 using Microsoft.CodeAnalysis.Host;
+#endif
 
 namespace Microsoft.CodeAnalysis.Diagnostics;
 
@@ -42,7 +45,7 @@ internal sealed record class IdeAnalyzerOptions
     public CodeGenerationOptions? GenerationOptions => CleanCodeGenerationOptions?.GenerationOptions;
 
 #if !CODE_STYLE
-    public static IdeAnalyzerOptions GetDefault(HostProjectServices languageServices)
+    public static IdeAnalyzerOptions GetDefault(LanguageServices languageServices)
         => new()
         {
             CleanCodeGenerationOptions = CodeGeneration.CleanCodeGenerationOptions.GetDefault(languageServices),

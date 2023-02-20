@@ -89,7 +89,7 @@ namespace Microsoft.CodeAnalysis.Simplification
         /// <summary>
         /// Expand qualifying parts of the specified subtree, annotating the parts using the <see cref="Annotation" /> annotation.
         /// </summary>
-        internal static TNode Expand<TNode>(TNode node, SemanticModel semanticModel, HostSolutionServices services, Func<SyntaxNode, bool>? expandInsideNode = null, bool expandParameter = false, CancellationToken cancellationToken = default) where TNode : SyntaxNode
+        internal static TNode Expand<TNode>(TNode node, SemanticModel semanticModel, SolutionServices services, Func<SyntaxNode, bool>? expandInsideNode = null, bool expandParameter = false, CancellationToken cancellationToken = default) where TNode : SyntaxNode
         {
             if (node == null)
                 throw new ArgumentNullException(nameof(node));
@@ -134,7 +134,7 @@ namespace Microsoft.CodeAnalysis.Simplification
         /// <summary>
         /// Expand qualifying parts of the specified subtree, annotating the parts using the <see cref="Annotation" /> annotation.
         /// </summary>
-        internal static SyntaxToken Expand(SyntaxToken token, SemanticModel semanticModel, HostSolutionServices services, Func<SyntaxNode, bool>? expandInsideNode = null, CancellationToken cancellationToken = default)
+        internal static SyntaxToken Expand(SyntaxToken token, SemanticModel semanticModel, SolutionServices services, Func<SyntaxNode, bool>? expandInsideNode = null, CancellationToken cancellationToken = default)
         {
             if (semanticModel == null)
                 throw new ArgumentNullException(nameof(semanticModel));
@@ -253,11 +253,9 @@ namespace Microsoft.CodeAnalysis.Simplification
 #pragma warning disable RS0030 // Do not used banned APIs (backwards compatibility)
         internal static async Task<SimplifierOptions> GetOptionsAsync(Document document, OptionSet? optionSet, CancellationToken cancellationToken)
         {
-            var services = document.Project.Solution.Services;
-            var optionService = services.GetRequiredService<IEditorConfigOptionMappingService>();
-            var configOptionSet = (optionSet ?? await document.GetOptionsAsync(cancellationToken).ConfigureAwait(false)).AsAnalyzerConfigOptions(optionService, document.Project.Language);
-            var simplificationService = services.GetRequiredLanguageService<ISimplificationService>(document.Project.Language);
-            return simplificationService.GetSimplifierOptions(configOptionSet, fallbackOptions: null);
+            optionSet ??= await document.GetOptionsAsync(cancellationToken).ConfigureAwait(false);
+            var simplificationService = document.Project.Solution.Services.GetRequiredLanguageService<ISimplificationService>(document.Project.Language);
+            return simplificationService.GetSimplifierOptions(optionSet, fallbackOptions: null);
         }
 #pragma warning restore
     }

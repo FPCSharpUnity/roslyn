@@ -10,6 +10,7 @@ Imports Microsoft.CodeAnalysis.Editor.UnitTests.Workspaces
 Imports Microsoft.CodeAnalysis.Host
 Imports Microsoft.CodeAnalysis.Host.Mef
 Imports Microsoft.CodeAnalysis.Options
+Imports Microsoft.CodeAnalysis.Shared.TestHooks
 Imports Microsoft.CodeAnalysis.Text
 
 Namespace Microsoft.CodeAnalysis.Editor.UnitTests.IntelliSense
@@ -41,7 +42,7 @@ Namespace Microsoft.CodeAnalysis.Editor.UnitTests.IntelliSense
                 Dim completionService = New TestCompletionService(workspace.Services.SolutionServices)
 
                 Dim list = Await completionService.GetCompletionsAsync(
-                    document, caretPosition:=0, CompletionOptions.Default, OptionValueSet.Empty, CompletionTrigger.Invoke)
+                    document, caretPosition:=0, CompletionOptions.Default, OptionSet.Empty, CompletionTrigger.Invoke)
 
                 Assert.NotEmpty(list.ItemsList)
                 Assert.True(list.ItemsList.Count = 2, "Completion List does not contain exactly two items.")
@@ -53,8 +54,8 @@ Namespace Microsoft.CodeAnalysis.Editor.UnitTests.IntelliSense
         Friend Class TestCompletionService
             Inherits CompletionService
 
-            Public Sub New(services As HostSolutionServices)
-                MyBase.New(services)
+            Public Sub New(services As SolutionServices)
+                MyBase.New(services, AsynchronousOperationListenerProvider.NullProvider)
             End Sub
 
             Public Overrides ReadOnly Property Language As String

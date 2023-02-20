@@ -33,6 +33,7 @@ namespace Microsoft.CodeAnalysis.Diagnostics.EngineV2
         private readonly StateManager _stateManager;
         private readonly InProcOrRemoteHostAnalyzerRunner _diagnosticAnalyzerRunner;
         private readonly IDocumentTrackingService _documentTrackingService;
+        private readonly IncrementalMemberEditAnalyzer _incrementalMemberEditAnalyzer = new();
 
 #if NETSTANDARD
         private ConditionalWeakTable<Project, CompilationWithAnalyzers?> _projectCompilationsWithAnalyzers = new();
@@ -69,8 +70,8 @@ namespace Microsoft.CodeAnalysis.Diagnostics.EngineV2
 
         private void OnGlobalOptionChanged(object? sender, OptionChangedEventArgs e)
         {
-            if (e.Option.Feature == nameof(SimplificationOptions) ||
-                e.Option.Feature == nameof(CodeStyleOptions) ||
+            if (e.Option == NamingStyleOptions.NamingPreferences ||
+                e.Option.Definition.Group.Parent == CodeStyleOptionGroups.CodeStyle ||
                 e.Option == SolutionCrawlerOptionsStorage.BackgroundAnalysisScopeOption ||
                 e.Option == SolutionCrawlerOptionsStorage.SolutionBackgroundAnalysisScopeOption ||
                 e.Option == SolutionCrawlerOptionsStorage.CompilerDiagnosticsScopeOption)

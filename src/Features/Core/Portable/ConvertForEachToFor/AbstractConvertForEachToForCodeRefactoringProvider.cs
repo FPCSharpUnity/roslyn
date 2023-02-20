@@ -14,7 +14,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
-using Microsoft.CodeAnalysis.LanguageServices;
+using Microsoft.CodeAnalysis.LanguageService;
 using Microsoft.CodeAnalysis.Operations;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Simplification;
@@ -84,7 +84,7 @@ namespace Microsoft.CodeAnalysis.ConvertForEachToFor
 
         protected static SyntaxToken CreateUniqueName(
             ISemanticFactsService semanticFacts, SemanticModel model, SyntaxNode location, string baseName, CancellationToken cancellationToken)
-            => semanticFacts.GenerateUniqueLocalName(model, location, containerOpt: null, baseName, cancellationToken);
+            => semanticFacts.GenerateUniqueLocalName(model, location, container: null, baseName, cancellationToken);
 
         protected static SyntaxNode GetCollectionVariableName(
             SemanticModel model, SyntaxGenerator generator,
@@ -351,10 +351,8 @@ namespace Microsoft.CodeAnalysis.ConvertForEachToFor
             foreach (var current in interfaceType.GetAllInterfacesIncludingThis())
             {
                 var members = current.GetMembers(memberName);
-                if (!members.IsEmpty && members[0] is IMethodSymbol method)
-                {
+                if (members is [IMethodSymbol method, ..])
                     return method;
-                }
             }
 
             return null;

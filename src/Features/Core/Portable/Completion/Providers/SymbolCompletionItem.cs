@@ -9,7 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.CodeAnalysis.LanguageServices;
+using Microsoft.CodeAnalysis.LanguageService;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Shared.Utilities;
@@ -58,7 +58,7 @@ namespace Microsoft.CodeAnalysis.Completion.Providers
                 displayTextPrefix: displayTextPrefix,
                 inlineDescription: inlineDescription,
                 rules: rules,
-                filterText: filterText ?? (displayText.Length > 0 && displayText[0] == '@' ? displayText : firstSymbol.Name),
+                filterText: filterText ?? (displayText is ['@', ..] ? displayText : firstSymbol.Name),
                 sortText: sortText ?? firstSymbol.Name,
                 glyph: glyph ?? firstSymbol.GetGlyph(),
                 showsWarningIcon: supportedPlatforms != null,

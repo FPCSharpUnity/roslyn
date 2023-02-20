@@ -8,7 +8,7 @@ using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis.LanguageServices;
+using Microsoft.CodeAnalysis.LanguageService;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 
 namespace Microsoft.CodeAnalysis.EmbeddedLanguages
@@ -167,9 +167,7 @@ namespace Microsoft.CodeAnalysis.EmbeddedLanguages
             var formatMethod = iformattable
                 .GetMembers(nameof(IFormattable.ToString))
                 .FirstOrDefault(
-                    m => m is IMethodSymbol method &&
-                         method.Parameters.Length > 0 &&
-                         method.Parameters[0].Type.SpecialType is SpecialType.System_String);
+                    m => m is IMethodSymbol { Parameters: [{ Type.SpecialType: SpecialType.System_String }, ..] });
             if (formatMethod == null)
                 return false;
 
@@ -276,7 +274,7 @@ namespace Microsoft.CodeAnalysis.EmbeddedLanguages
                 return HasMatchingStringSyntaxAttribute(fieldOrProperty, out identifier);
 
             // Otherwise, see if it's a normal named/position argument to the attribute.
-            var parameter = Info.SemanticFacts.FindParameterForAttributeArgument(semanticModel, argument, allowUncertainCandidates: true, cancellationToken);
+            var parameter = Info.SemanticFacts.FindParameterForAttributeArgument(semanticModel, argument, allowUncertainCandidates: true, allowParams: true, cancellationToken);
             return HasMatchingStringSyntaxAttribute(parameter, out identifier);
         }
 
@@ -290,7 +288,7 @@ namespace Microsoft.CodeAnalysis.EmbeddedLanguages
             if (fieldOrProperty != null)
                 return HasMatchingStringSyntaxAttribute(fieldOrProperty, out identifier);
 
-            var parameter = Info.SemanticFacts.FindParameterForArgument(semanticModel, argument, allowUncertainCandidates: true, cancellationToken);
+            var parameter = Info.SemanticFacts.FindParameterForArgument(semanticModel, argument, allowUncertainCandidates: true, allowParams: true, cancellationToken);
             return HasMatchingStringSyntaxAttribute(parameter, out identifier);
         }
 

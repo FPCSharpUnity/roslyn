@@ -82,20 +82,23 @@ namespace Microsoft.CodeAnalysis.ExternalAccess.OmniSharp.Options
                 _lineFormattingOptionsProvider = lineFormattingOptionsProvider;
             }
 
-            public override ValueTask<CleanCodeGenerationOptions> GetCleanCodeGenerationOptionsAsync(HostLanguageServices languageServices, CancellationToken cancellationToken)
+            public override ValueTask<CleanCodeGenerationOptions> GetCleanCodeGenerationOptionsAsync(LanguageServices languageServices, CancellationToken cancellationToken)
             {
                 var lineFormattingOptions = _lineFormattingOptionsProvider.GetLineFormattingOptions();
-                var codeGenerationOptions = CleanCodeGenerationOptions.GetDefault(languageServices.ProjectServices) with
+                var codeGenerationOptions = CleanCodeGenerationOptions.GetDefault(languageServices) with
                 {
-                    CleanupOptions = CodeCleanupOptions.GetDefault(languageServices.ProjectServices) with
+                    CleanupOptions = CodeCleanupOptions.GetDefault(languageServices) with
                     {
-                        FormattingOptions = SyntaxFormattingOptions.GetDefault(languageServices.ProjectServices).With(new LineFormattingOptions
+                        FormattingOptions = SyntaxFormattingOptions.GetDefault(languageServices) with
                         {
-                            IndentationSize = lineFormattingOptions.IndentationSize,
-                            TabSize = lineFormattingOptions.TabSize,
-                            UseTabs = lineFormattingOptions.UseTabs,
-                            NewLine = lineFormattingOptions.NewLine,
-                        })
+                            LineFormatting = new()
+                            {
+                                IndentationSize = lineFormattingOptions.IndentationSize,
+                                TabSize = lineFormattingOptions.TabSize,
+                                UseTabs = lineFormattingOptions.UseTabs,
+                                NewLine = lineFormattingOptions.NewLine,
+                            }
+                        }
                     }
                 };
                 return new ValueTask<CleanCodeGenerationOptions>(codeGenerationOptions);

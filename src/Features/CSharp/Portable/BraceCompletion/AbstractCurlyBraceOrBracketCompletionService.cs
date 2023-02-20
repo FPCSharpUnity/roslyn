@@ -7,13 +7,11 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.BraceCompletion;
+using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
 using Microsoft.CodeAnalysis.Formatting.Rules;
-using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Indentation;
-using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Text;
@@ -46,9 +44,8 @@ namespace Microsoft.CodeAnalysis.CSharp.BraceCompletion
                 return null;
             }
 
-            var (formattingChanges, finalCurlyBraceEnd) = FormatTrackingSpan(
+            var (_, formattingChanges, finalCurlyBraceEnd) = FormatTrackingSpan(
                 context.Document,
-                context.Document.LanguageServices.ProjectServices,
                 context.OpeningPoint,
                 context.ClosingPoint,
                 // We're not trying to format the indented block here, so no need to pass in additional rules.
@@ -115,44 +112,45 @@ namespace Microsoft.CodeAnalysis.CSharp.BraceCompletion
 
             // If there is not already an empty line inserted between the braces, insert one.
             TextChange? newLineEdit = null;
-            var textToFormat = originalDocumentText;
             if (closingPointLine - openingPointLine == 1)
             {
+                // Handling syntax tree directly to avoid parsing in potentially UI blocking code-path
+                var closingToken = document.Root.FindTokenOnLeftOfPosition(context.ClosingPoint);
                 var newLineString = options.FormattingOptions.NewLine;
-                newLineEdit = new TextChange(new TextSpan(closingPoint - 1, 0), newLineString);
-                textToFormat = originalDocumentText.WithChanges(newLineEdit.Value);
+                newLineEdit = new TextChange(new TextSpan(closingToken.FullSpan.Start, 0), newLineString);
+
+                var generator = document.LanguageServices.GetRequiredService<SyntaxGeneratorInternal>();
+                var endOfLine = generator.EndOfLine(newLineString);
+
+                var rootToFormat = document.Root.ReplaceToken(closingToken, closingToken.WithPrependedLeadingTrivia(endOfLine));
+                document = document.WithChangedRoot(rootToFormat, cancellationToken);
 
                 // Modify the closing point location to adjust for the newly inserted line.
                 closingPoint += newLineString.Length;
             }
 
-            var documentToFormat = document.WithChangedText(textToFormat, cancellationToken);
-
             // Format the text that contains the newly inserted line.
-            var (formattingChanges, newClosingPoint) = FormatTrackingSpan(
-                documentToFormat,
-                document.LanguageServices.ProjectServices,
+            var (formattedRoot, formattingChanges, newClosingPoint) = FormatTrackingSpan(
+                document,
                 openingPoint,
                 closingPoint,
                 braceFormattingIndentationRules: GetBraceFormattingIndentationRulesAfterReturn(options),
                 options,
                 cancellationToken);
 
-            closingPoint = newClosingPoint;
-            var formattedText = textToFormat.WithChanges(formattingChanges);
+            var newDocument = document.WithChangedRoot(formattedRoot, cancellationToken);
 
             // Get the empty line between the curly braces.
-            var desiredCaretLine = GetLineBetweenCurlys(closingPoint, formattedText);
+            var desiredCaretLine = GetLineBetweenCurlys(newClosingPoint, newDocument.Text);
             Debug.Assert(desiredCaretLine.GetFirstNonWhitespacePosition() == null, "the line between the formatted braces is not empty");
 
             // Set the caret position to the properly indented column in the desired line.
-            var newDocument = document.WithChangedText(formattedText, cancellationToken);
             var caretPosition = GetIndentedLinePosition(newDocument, newDocument.Text, desiredCaretLine.LineNumber, options, cancellationToken);
 
             // The new line edit is calculated against the original text, d0, to get text d1.
             // The formatting edits are calculated against d1 to get text d2.
             // Merge the formatting and new line edits into a set of whitespace only text edits that all apply to d0.
-            var overallChanges = newLineEdit != null ? GetMergedChanges(newLineEdit.Value, formattingChanges, formattedText) : formattingChanges;
+            var overallChanges = newLineEdit != null ? GetMergedChanges(newLineEdit.Value, formattingChanges, newDocument.Text) : formattingChanges;
             return new BraceCompletionResult(overallChanges, caretPosition);
 
             static TextLine GetLineBetweenCurlys(int closingPosition, SourceText text)
@@ -163,7 +161,7 @@ namespace Microsoft.CodeAnalysis.CSharp.BraceCompletion
 
             static LinePosition GetIndentedLinePosition(ParsedDocument document, SourceText sourceText, int lineNumber, IndentationOptions options, CancellationToken cancellationToken)
             {
-                var indentationService = document.ProjectServices.GetRequiredService<IIndentationService>();
+                var indentationService = document.LanguageServices.GetRequiredService<IIndentationService>();
                 var indentation = indentationService.GetIndentation(document, lineNumber, options, cancellationToken);
 
                 var baseLinePosition = sourceText.Lines.GetLinePosition(indentation.BasePosition);
@@ -205,9 +203,8 @@ namespace Microsoft.CodeAnalysis.CSharp.BraceCompletion
         /// Returns the text changes that should be applied to the input document to 
         /// get the formatted text and the end of the close curly brace in the formatted text.
         /// </summary>
-        private (ImmutableArray<TextChange> textChanges, int finalBraceEnd) FormatTrackingSpan(
+        private (SyntaxNode formattedRoot, ImmutableArray<TextChange> textChanges, int finalBraceEnd) FormatTrackingSpan(
             ParsedDocument document,
-            HostProjectServices languageServices,
             int openingPoint,
             int closingPoint,
             ImmutableArray<AbstractFormattingRule> braceFormattingIndentationRules,
@@ -236,24 +233,24 @@ namespace Microsoft.CodeAnalysis.CSharp.BraceCompletion
             }
 
             var spanToFormat = TextSpan.FromBounds(Math.Max(startPoint, 0), endPoint);
-            var rules = FormattingRuleUtilities.GetFormattingRules(document, languageServices, spanToFormat, braceFormattingIndentationRules);
+            var rules = FormattingRuleUtilities.GetFormattingRules(document, spanToFormat, braceFormattingIndentationRules);
 
             // Annotate the original closing brace so we can find it after formatting.
             var annotatedRoot = GetSyntaxRootWithAnnotatedClosingBrace(document.Root, closingPoint);
 
             var result = Formatter.GetFormattingResult(
-                annotatedRoot, SpecializedCollections.SingletonEnumerable(spanToFormat), languageServices.SolutionServices, options.FormattingOptions, rules, cancellationToken);
+                annotatedRoot, SpecializedCollections.SingletonEnumerable(spanToFormat), document.SolutionServices, options.FormattingOptions, rules, cancellationToken);
 
             if (result == null)
             {
-                return (ImmutableArray<TextChange>.Empty, closingPoint);
+                return (document.Root, ImmutableArray<TextChange>.Empty, closingPoint);
             }
 
             var newRoot = result.GetFormattedRoot(cancellationToken);
             var newClosingPoint = newRoot.GetAnnotatedTokens(s_closingBraceSyntaxAnnotation).Single().SpanStart + 1;
 
             var textChanges = result.GetTextChanges(cancellationToken).ToImmutableArray();
-            return (textChanges, newClosingPoint);
+            return (newRoot, textChanges, newClosingPoint);
 
             SyntaxNode GetSyntaxRootWithAnnotatedClosingBrace(SyntaxNode originalRoot, int closingBraceEndPoint)
             {

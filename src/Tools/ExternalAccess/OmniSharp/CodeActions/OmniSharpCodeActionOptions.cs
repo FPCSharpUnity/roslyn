@@ -17,20 +17,23 @@ namespace Microsoft.CodeAnalysis.ExternalAccess.OmniSharp.CodeActions
         OmniSharpImplementTypeOptions ImplementTypeOptions,
         OmniSharpLineFormattingOptions LineFormattingOptions)
     {
-        internal CodeActionOptions GetCodeActionOptions(HostLanguageServices languageServices)
+        internal CodeActionOptions GetCodeActionOptions(LanguageServices languageServices)
         {
-            var defaultOptions = CodeActionOptions.GetDefault(languageServices.ProjectServices);
+            var defaultOptions = CodeActionOptions.GetDefault(languageServices);
             return defaultOptions with
             {
                 CleanupOptions = defaultOptions.CleanupOptions with
                 {
-                    FormattingOptions = defaultOptions.CleanupOptions.FormattingOptions.With(new LineFormattingOptions
+                    FormattingOptions = defaultOptions.CleanupOptions.FormattingOptions with
                     {
-                        IndentationSize = LineFormattingOptions.IndentationSize,
-                        TabSize = LineFormattingOptions.TabSize,
-                        UseTabs = LineFormattingOptions.UseTabs,
-                        NewLine = LineFormattingOptions.NewLine,
-                    })
+                        LineFormatting = new()
+                        {
+                            IndentationSize = LineFormattingOptions.IndentationSize,
+                            TabSize = LineFormattingOptions.TabSize,
+                            UseTabs = LineFormattingOptions.UseTabs,
+                            NewLine = LineFormattingOptions.NewLine,
+                        }
+                    }
                 },
                 ImplementTypeOptions = new()
                 {

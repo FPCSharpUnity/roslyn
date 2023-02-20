@@ -118,7 +118,7 @@ namespace Microsoft.CodeAnalysis.EncapsulateField
                     var result = await client.TryInvokeAsync<IRemoteEncapsulateFieldService, ImmutableArray<(DocumentId, ImmutableArray<TextChange>)>>(
                         solution,
                         (service, solutionInfo, callbackId, cancellationToken) => service.EncapsulateFieldsAsync(solutionInfo, callbackId, document.Id, fieldSymbolKeys, updateReferences, cancellationToken),
-                        callbackTarget: new RemoteOptionsProvider<CleanCodeGenerationOptions>(solution.Workspace.Services, fallbackOptions),
+                        callbackTarget: new RemoteOptionsProvider<CleanCodeGenerationOptions>(solution.Services, fallbackOptions),
                         cancellationToken).ConfigureAwait(false);
 
                     if (!result.HasValue)
@@ -449,16 +449,12 @@ namespace Microsoft.CodeAnalysis.EncapsulateField
             var baseName = fieldName.TrimStart(s_underscoreCharArray);
 
             // Trim leading "m_"
-            if (baseName.Length >= 2 && baseName[0] == 'm' && baseName[1] == '_')
-            {
-                baseName = baseName[2..];
-            }
+            if (baseName is ['m', '_', .. var rest])
+                baseName = rest;
 
             // Take original name if no characters left
             if (baseName.Length == 0)
-            {
                 baseName = fieldName;
-            }
 
             // Make the first character upper case using the "en-US" culture.  See discussion at
             // https://github.com/dotnet/roslyn/issues/5524.

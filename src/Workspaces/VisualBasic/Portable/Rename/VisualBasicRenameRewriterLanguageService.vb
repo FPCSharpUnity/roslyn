@@ -6,7 +6,7 @@ Imports System.Collections.Immutable
 Imports System.Threading
 Imports Microsoft.CodeAnalysis
 Imports Microsoft.CodeAnalysis.FindSymbols
-Imports Microsoft.CodeAnalysis.LanguageServices
+Imports Microsoft.CodeAnalysis.LanguageService
 Imports Microsoft.CodeAnalysis.PooledObjects
 Imports Microsoft.CodeAnalysis.Rename
 Imports Microsoft.CodeAnalysis.Rename.ConflictEngine
@@ -42,9 +42,9 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Rename
             Private ReadOnly _solution As Solution
             Private ReadOnly _replacementText As String
             Private ReadOnly _originalText As String
-            Private ReadOnly _possibleNameConflicts As ICollection(Of String)
-            Private ReadOnly _renameLocations As Dictionary(Of TextSpan, RenameLocation)
-            Private ReadOnly _conflictLocations As IEnumerable(Of TextSpan)
+            Private ReadOnly _possibleNameConflicts As ImmutableArray(Of String)
+            Private ReadOnly _renameLocations As ImmutableDictionary(Of TextSpan, RenameLocation)
+            Private ReadOnly _conflictLocations As ImmutableHashSet(Of TextSpan)
             Private ReadOnly _semanticModel As SemanticModel
             Private ReadOnly _cancellationToken As CancellationToken
             Private ReadOnly _renamedSymbol As ISymbol

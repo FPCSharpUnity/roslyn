@@ -4,18 +4,20 @@
 
 using System;
 using System.Collections.Generic;
-using System.Composition;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Host;
 using Microsoft.CodeAnalysis.Host.Mef;
+using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.Storage;
 using Microsoft.CodeAnalysis.Test.Utilities;
 using Microsoft.VisualStudio.LanguageServices.UnitTests;
 using Roslyn.Test.Utilities;
+using Roslyn.Utilities;
 using Xunit;
 
 namespace Microsoft.CodeAnalysis.UnitTests.WorkspaceServices
@@ -870,6 +872,46 @@ namespace Microsoft.CodeAnalysis.UnitTests.WorkspaceServices
             }
         }
 
+        [Theory, CombinatorialData]
+        public async Task TestPersistSyntaxTreeIndex([CombinatorialRange(0, Iterations)] int iteration)
+        {
+            _ = iteration;
+            var solution = CreateOrOpenSolution();
+            var id = DocumentId.CreateNewId(solution.Projects.Single().Id);
+            solution = solution.AddDocument(id, "file.cs", "class C { void M() }", filePath: @"c:\temp\file.cs");
+
+            var document = solution.GetRequiredDocument(id);
+
+            await using (var storage = await GetStorageAsync(solution))
+            {
+                var index = await SyntaxTreeIndex.GetRequiredIndexAsync(document, default);
+                await index.SaveAsync(_storageService!, document, default);
+
+                var index2 = await SyntaxTreeIndex.LoadAsync(_storageService!, DocumentKey.ToDocumentKey(document), checksum: null, new StringTable(), default);
+                Assert.NotNull(index2);
+            }
+        }
+
+        [Theory, CombinatorialData]
+        public async Task TestPersistTopLevelSyntaxTreeIndex([CombinatorialRange(0, Iterations)] int iteration)
+        {
+            _ = iteration;
+            var solution = CreateOrOpenSolution();
+            var id = DocumentId.CreateNewId(solution.Projects.Single().Id);
+            solution = solution.AddDocument(id, "file.cs", "class C { void M() }", filePath: @"c:\temp\file.cs");
+
+            var document = solution.GetRequiredDocument(id);
+
+            await using (var storage = await GetStorageAsync(solution))
+            {
+                var index = await TopLevelSyntaxTreeIndex.GetRequiredIndexAsync(document, default);
+                await index.SaveAsync(_storageService!, document, default);
+
+                var index2 = await TopLevelSyntaxTreeIndex.LoadAsync(_storageService!, DocumentKey.ToDocumentKey(document), checksum: null, new StringTable(), default);
+                Assert.NotNull(index2);
+            }
+        }
+
         private static void DoSimultaneousReads(Func<Task<string>> read, string expectedValue)
         {
             var barrier = new Barrier(NumThreads);
@@ -973,7 +1015,7 @@ namespace Microsoft.CodeAnalysis.UnitTests.WorkspaceServices
             _storageService?.GetTestAccessor().Shutdown();
             var configuration = new MockPersistentStorageConfiguration(solution.Id, persistentFolder.Path, throwOnFailure);
 
-            _storageService = GetStorageService((IMefHostExportProvider)solution.Workspace.Services.HostServices, configuration, faultInjector, _persistentFolder.Path);
+            _storageService = GetStorageService(solution.Workspace.Services.SolutionServices.ExportProvider, configuration, faultInjector, _persistentFolder.Path);
             var storage = await _storageService.GetStorageAsync(SolutionKey.ToSolutionKey(solution), CancellationToken.None);
 
             // If we're injecting faults, we expect things to be strange
@@ -992,7 +1034,7 @@ namespace Microsoft.CodeAnalysis.UnitTests.WorkspaceServices
             _storageService?.GetTestAccessor().Shutdown();
             var configuration = new MockPersistentStorageConfiguration(solutionKey.Id, _persistentFolder.Path, throwOnFailure: true);
 
-            _storageService = GetStorageService((IMefHostExportProvider)services.HostServices, configuration, faultInjector, _persistentFolder.Path);
+            _storageService = GetStorageService(services.SolutionServices.ExportProvider, configuration, faultInjector, _persistentFolder.Path);
             var storage = await _storageService.GetStorageAsync(solutionKey, CancellationToken.None);
 
             // If we're injecting faults, we expect things to be strange

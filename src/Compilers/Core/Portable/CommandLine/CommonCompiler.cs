@@ -32,13 +32,13 @@ namespace Microsoft.CodeAnalysis
         internal string ClientDirectory { get; }
 
         /// <summary>
-        /// The path in which the compilation takes place. This is also referred to as "baseDirectory" in 
+        /// The path in which the compilation takes place. This is also referred to as "baseDirectory" in
         /// the code base.
         /// </summary>
         internal string WorkingDirectory { get; }
 
         /// <summary>
-        /// The path which contains mscorlib.  This can be null when specified by the user or running in a 
+        /// The path which contains mscorlib.  This can be null when specified by the user or running in a
         /// CoreClr environment.
         /// </summary>
         internal string? SdkDirectory { get; }
@@ -82,7 +82,7 @@ namespace Microsoft.CodeAnalysis
         /// The set of source file paths that are in the set of embedded paths.
         /// This is used to prevent reading source files that are embedded twice.
         /// </summary>
-        public IReadOnlySet<string> EmbeddedSourcePaths { get; }
+        public Roslyn.Utilities.IReadOnlySet<string> EmbeddedSourcePaths { get; }
 
         /// <summary>
         /// The <see cref="ICommonCompilerFileSystem"/> used to access the file system inside this instance.
@@ -161,7 +161,7 @@ namespace Microsoft.CodeAnalysis
             return $"{assemblyVersion} ({hash})";
         }
 
-        [return: NotNullIfNotNull("hash")]
+        [return: NotNullIfNotNull(nameof(hash))]
         internal static string? ExtractShortCommitHash(string? hash)
         {
             // leave "<developer build>" alone, but truncate SHA to 8 characters
@@ -287,7 +287,6 @@ namespace Microsoft.CodeAnalysis
                 return null;
             }
         }
-
 
         /// <summary>
         /// Read all analyzer config files from the given paths.
@@ -477,14 +476,13 @@ namespace Microsoft.CodeAnalysis
             return embeddedTextBuilder.MoveToImmutable();
         }
 
-
         protected abstract void ResolveEmbeddedFilesFromExternalSourceDirectives(
             SyntaxTree tree,
             SourceReferenceResolver resolver,
             OrderedSet<string> embeddedFiles,
             DiagnosticBag diagnostics);
 
-        private static IReadOnlySet<string> GetEmbeddedSourcePaths(CommandLineArguments arguments)
+        private static Roslyn.Utilities.IReadOnlySet<string> GetEmbeddedSourcePaths(CommandLineArguments arguments)
         {
             if (arguments.EmbeddedFiles.IsEmpty)
             {
@@ -674,7 +672,7 @@ namespace Microsoft.CodeAnalysis
             consoleOutput.WriteLine(DiagnosticFormatter.Format(diagnostic, Culture));
         }
 
-        public SarifErrorLogger? GetErrorLogger(TextWriter consoleOutput, CancellationToken cancellationToken)
+        public SarifErrorLogger? GetErrorLogger(TextWriter consoleOutput)
         {
             Debug.Assert(Arguments.ErrorLogOptions?.Path != null);
 
@@ -731,7 +729,7 @@ namespace Microsoft.CodeAnalysis
 
                 if (Arguments.ErrorLogOptions?.Path != null)
                 {
-                    errorLogger = GetErrorLogger(consoleOutput, cancellationToken);
+                    errorLogger = GetErrorLogger(consoleOutput);
                     if (errorLogger == null)
                     {
                         return Failed;
@@ -809,8 +807,8 @@ namespace Microsoft.CodeAnalysis
                 //           We set up the graph statically based on the generators, so as long as the generator inputs haven't
                 //           changed we can technically run any project against another's cache and still get the correct results.
                 //           Obviously that would remove the point of the cache, so we also key off of the output file name
-                //           and output path so that collisions are unlikely and we'll usually get the correct cache for any 
-                //           given compilation. 
+                //           and output path so that collisions are unlikely and we'll usually get the correct cache for any
+                //           given compilation.
 
                 PooledStringBuilder sb = PooledStringBuilder.GetInstance();
                 sb.Builder.Append(Arguments.GetOutputFilePath(Arguments.OutputFileName));
@@ -937,6 +935,9 @@ namespace Microsoft.CodeAnalysis
                 generators
             );
             
+            // At this point analyzers are already complete in which case this is a no-op.  Or they are
+            // still running because the compilation failed before all of the compilation events were
+            // raised.  In the latter case the driver, and all its associated state, will be waiting around
             if (ReportDiagnostics(diagnostics, consoleOutput, errorLogger, compilation)) return Failed;
 
             ImmutableArray<AnalyzerConfigOptionsResult> useMapping(Compilation compilation)
@@ -1138,6 +1139,7 @@ namespace Microsoft.CodeAnalysis
             ImmutableArray<AnalyzerConfigOptionsResult> sourceFileAnalyzerConfigOptions,
             ImmutableArray<EmbeddedText?> embeddedTexts,
             DiagnosticBag diagnostics,
+            ErrorLogger? errorLogger,
             CancellationToken cancellationToken,
             out CancellationTokenSource? analyzerCts,
             out AnalyzerDriver? analyzerDriver,
@@ -1189,8 +1191,8 @@ namespace Microsoft.CodeAnalysis
                     // But I fixed it by storing the number of file just before code generation and using that.
                     var syntaxTreeCountBeforeGeneration = compilation.SyntaxTrees.Count();
 
-                    // At this point we have a compilation with nothing yet computed. 
-                    // We pass it to the generators, which will realize any symbols they require. 
+                    // At this point we have a compilation with nothing yet computed.
+                    // We pass it to the generators, which will realize any symbols they require.
                     (compilation, generatorTimingInfo) = RunGenerators(compilation, Arguments.ParseOptions, generators, analyzerConfigProvider, additionalTextFiles, diagnostics);
 
                     bool hasAnalyzerConfigs = !Arguments.AnalyzerConfigPaths.IsEmpty;
@@ -1276,6 +1278,7 @@ namespace Microsoft.CodeAnalysis
                         analyzerExceptionDiagnostics.Add,
                         Arguments.ReportAnalyzer,
                         severityFilter,
+                        trackSuppressedDiagnosticIds: errorLogger != null,
                         out compilation,
                         analyzerCts.Token);
                 }
@@ -1308,7 +1311,7 @@ namespace Microsoft.CodeAnalysis
                     WithPdbFilePath(PathUtilities.NormalizePathPrefix(finalPdbFilePath, Arguments.PathMap));
 
                 // TODO(https://github.com/dotnet/roslyn/issues/19592):
-                // This feature flag is being maintained until our next major release to avoid unnecessary 
+                // This feature flag is being maintained until our next major release to avoid unnecessary
                 // compat breaks with customers.
                 if (Arguments.ParseOptions.Features.ContainsKey("pdb-path-determinism") && !string.IsNullOrEmpty(emitOptions.PdbFilePath))
                 {
@@ -1339,9 +1342,9 @@ namespace Microsoft.CodeAnalysis
                     }
                 }
 
-                // Need to ensure the PDB file path validation is done on the original path as that is the 
-                // file we will write out to disk, there is no guarantee that the file paths emitted into 
-                // the PE / PDB are valid file paths because pathmap can be used to create deliberately 
+                // Need to ensure the PDB file path validation is done on the original path as that is the
+                // file we will write out to disk, there is no guarantee that the file paths emitted into
+                // the PE / PDB are valid file paths because pathmap can be used to create deliberately
                 // illegal names
                 if (!PathUtilities.IsValidFilePath(finalPdbFilePath))
                 {
@@ -1465,6 +1468,11 @@ namespace Microsoft.CodeAnalysis
                             {
                                 // Apply diagnostic suppressions for analyzer and/or compiler diagnostics from diagnostic suppressors.
                                 analyzerDriver.ApplyProgrammaticSuppressions(diagnostics, compilation);
+                            }
+
+                            if (errorLogger != null)
+                            {
+                                errorLogger.AddAnalyzerDescriptors(analyzerDriver.GetAllDescriptors());
                             }
                         }
                     }

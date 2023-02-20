@@ -3752,8 +3752,10 @@ ref struct E2
                 Diagnostic(ErrorCode.ERR_EscapeStackAlloc, "Field = stackalloc byte[512]").WithArguments("System.Span<byte>").WithLocation(9, 57));
         }
 
-        [Fact]
-        public void FieldInitializer_EscapeAnalysis_04()
+        [Theory]
+        [InlineData(LanguageVersion.CSharp10)]
+        [InlineData(LanguageVersion.Latest)]
+        public void FieldInitializer_EscapeAnalysis_04(LanguageVersion languageVersion)
         {
             var source =
 @"using System;
@@ -3765,19 +3767,7 @@ ref struct Example
     public Example() {}
     static Span<T> F<T>(D<T> d) => d();
 }";
-            var comp = CreateCompilationWithSpan(source, parseOptions: TestOptions.Regular10);
-            comp.VerifyDiagnostics(
-                // (5,31): error CS0188: The 'this' object cannot be used before all of its fields have been assigned. Consider updating to language version '11.0' to auto-default the unassigned fields.
-                //     public Span<byte> Field = F(() => stackalloc byte[512]);
-                Diagnostic(ErrorCode.ERR_UseDefViolationThisUnsupportedVersion, "F").WithArguments("11.0").WithLocation(5, 31),
-                // (5,39): error CS8353: A result of a stackalloc expression of type 'Span<byte>' cannot be used in this context because it may be exposed outside of the containing method
-                //     public Span<byte> Field = F(() => stackalloc byte[512]);
-                Diagnostic(ErrorCode.ERR_EscapeStackAlloc, "stackalloc byte[512]").WithArguments("System.Span<byte>").WithLocation(5, 39),
-                // (6,51): error CS8353: A result of a stackalloc expression of type 'Span<byte>' cannot be used in this context because it may be exposed outside of the containing method
-                //     public Span<byte> Property { get; } = F(() => stackalloc byte[512]);
-                Diagnostic(ErrorCode.ERR_EscapeStackAlloc, "stackalloc byte[512]").WithArguments("System.Span<byte>").WithLocation(6, 51));
-
-            comp = CreateCompilationWithSpan(source);
+            var comp = CreateCompilationWithSpan(source, parseOptions: TestOptions.Regular.WithLanguageVersion(languageVersion));
             comp.VerifyDiagnostics(
                 // (5,39): error CS8353: A result of a stackalloc expression of type 'Span<byte>' cannot be used in this context because it may be exposed outside of the containing method
                 //     public Span<byte> Field = F(() => stackalloc byte[512]);
@@ -3930,6 +3920,46 @@ public struct S
         }
 
         [Fact]
+        public void ImplicitlyInitializedField_Pointer()
+        {
+            var source = """
+using System;
+
+_ = new R();
+
+unsafe struct R
+{
+    public int* field;
+
+    public R()
+    {
+        Console.WriteLine("explicit ctor");
+    }
+}
+""";
+            var comp = CreateCompilation(source, options: TestOptions.UnsafeDebugExe);
+            comp.VerifyDiagnostics(
+                // (7,17): warning CS0649: Field 'R.field' is never assigned to, and will always have its default value
+                //     public int* field;
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "field").WithArguments("R.field", "").WithLocation(7, 17)
+                );
+            var verifier = CompileAndVerify(comp, verify: Verification.Skipped, expectedOutput: "explicit ctor");
+            verifier.VerifyIL("R..ctor()", @"
+{
+  // Code size       25 (0x19)
+  .maxstack  1
+  IL_0000:  nop
+  IL_0001:  ldarg.0
+  IL_0002:  ldflda     ""int* R.field""
+  IL_0007:  initobj    ""int*""
+  IL_000d:  ldstr      ""explicit ctor""
+  IL_0012:  call       ""void System.Console.WriteLine(string)""
+  IL_0017:  nop
+  IL_0018:  ret
+}");
+        }
+
+        [Fact]
         public void ImplicitlyInitializedField_NotOtherStruct()
         {
             var source = @"
@@ -4059,6 +4089,71 @@ public struct S
   IL_001a:  ret
 }
 ");
+        }
+
+        [Fact, WorkItem(66046, "https://github.com/dotnet/roslyn/issues/66046")]
+        public void ImplicitlyInitializedField_ConstructorInitializer_01()
+        {
+            var source = """
+public struct S1
+{
+    public int F;
+
+    S1(int x) {}
+
+    public S1() : this(F) {}
+}
+""";
+            var comp = CreateCompilation(source);
+            comp.VerifyDiagnostics(
+                // (7,24): error CS0120: An object reference is required for the non-static field, method, or property 'S1.F'
+                //     public S1() : this(F) {}
+                Diagnostic(ErrorCode.ERR_ObjectRequired, "F").WithArguments("S1.F").WithLocation(7, 24));
+        }
+
+        [Fact, WorkItem(66046, "https://github.com/dotnet/roslyn/issues/66046")]
+        public void ImplicitlyInitializedField_ConstructorInitializer_02()
+        {
+            var source = """
+public struct S1
+{
+    public int F;
+
+    S1(int x) {}
+
+    public static int M(int y) => y;
+
+    public S1() : this(M(F)) {}
+}
+""";
+            var comp = CreateCompilation(source);
+            comp.VerifyDiagnostics(
+                // (9,26): error CS0120: An object reference is required for the non-static field, method, or property 'S1.F'
+                //     public S1() : this(M(F)) {}
+                Diagnostic(ErrorCode.ERR_ObjectRequired, "F").WithArguments("S1.F").WithLocation(9, 26));
+        }
+
+        [Fact, WorkItem(66046, "https://github.com/dotnet/roslyn/issues/66046")]
+        public void ImplicitlyInitializedField_ConstructorInitializer_03()
+        {
+            var source = """
+public struct S1
+{
+    public int F;
+
+    S1(int x) {}
+
+    public S1() : base(F) {}
+}
+""";
+            var comp = CreateCompilation(source);
+            comp.VerifyDiagnostics(
+                // (7,12): error CS0522: 'S1': structs cannot call base class constructors
+                //     public S1() : base(F) {}
+                Diagnostic(ErrorCode.ERR_StructWithBaseConstructorCall, "S1").WithArguments("S1").WithLocation(7, 12),
+                // (7,24): error CS0120: An object reference is required for the non-static field, method, or property 'S1.F'
+                //     public S1() : base(F) {}
+                Diagnostic(ErrorCode.ERR_ObjectRequired, "F").WithArguments("S1.F").WithLocation(7, 24));
         }
 
         [Theory]

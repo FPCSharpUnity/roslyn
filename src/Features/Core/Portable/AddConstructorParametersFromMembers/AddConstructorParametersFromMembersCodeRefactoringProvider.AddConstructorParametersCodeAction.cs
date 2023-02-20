@@ -11,7 +11,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeGeneration;
 using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.Formatting;
-using Microsoft.CodeAnalysis.LanguageServices;
+using Microsoft.CodeAnalysis.LanguageService;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Roslyn.Utilities;
 
@@ -98,7 +98,7 @@ namespace Microsoft.CodeAnalysis.AddConstructorParametersFromMembers
 
                     if (_useSubMenuName)
                     {
-                        return string.Format(FeaturesResources.Add_to_0, signature);
+                        return string.Format(CodeFixesResources.Add_to_0, signature);
                     }
                     else
                     {

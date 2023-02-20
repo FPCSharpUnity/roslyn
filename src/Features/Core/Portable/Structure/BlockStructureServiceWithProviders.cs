@@ -16,10 +16,10 @@ namespace Microsoft.CodeAnalysis.Structure
 {
     internal abstract class BlockStructureServiceWithProviders : BlockStructureService
     {
-        private readonly HostSolutionServices _services;
+        private readonly SolutionServices _services;
         private readonly ImmutableArray<BlockStructureProvider> _providers;
 
-        protected BlockStructureServiceWithProviders(HostSolutionServices services)
+        protected BlockStructureServiceWithProviders(SolutionServices services)
         {
             _services = services;
             _providers = GetBuiltInProviders().Concat(GetImportedProviders());
@@ -52,15 +52,6 @@ namespace Microsoft.CodeAnalysis.Structure
             var syntaxTree = await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
             var context = CreateContext(syntaxTree, options, cancellationToken);
 
-            return GetBlockStructure(context, _providers);
-        }
-
-        public BlockStructure GetBlockStructure(
-            SyntaxTree syntaxTree,
-            in BlockStructureOptions options,
-            CancellationToken cancellationToken)
-        {
-            var context = CreateContext(syntaxTree, options, cancellationToken);
             return GetBlockStructure(context, _providers);
         }
 

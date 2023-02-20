@@ -8,7 +8,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.CodeAnalysis.LanguageServices;
+using Microsoft.CodeAnalysis.LanguageService;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Roslyn.Utilities;
@@ -206,7 +206,7 @@ namespace Microsoft.CodeAnalysis.FindSymbols.Finders
         {
             // Only check `new (...)` calls that supply enough arguments to match all the required parameters for the constructor.
             var minimumArgumentCount = symbol.Parameters.Count(p => !p.IsOptional && !p.IsParams);
-            var maximumArgumentCount = symbol.Parameters.Length > 0 && symbol.Parameters.Last().IsParams
+            var maximumArgumentCount = symbol.Parameters is [.., { IsParams: true }]
                 ? int.MaxValue
                 : symbol.Parameters.Length;
 

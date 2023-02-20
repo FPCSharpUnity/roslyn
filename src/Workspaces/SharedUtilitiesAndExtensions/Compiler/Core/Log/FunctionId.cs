@@ -417,7 +417,7 @@ namespace Microsoft.CodeAnalysis.Internal.Log
         LiveTableDataSource_OnDiagnosticsUpdated = 333,
         Experiment_KeybindingsReset = 334,
         Diagnostics_GeneratePerformaceReport = 335,
-        Diagnostics_BadAnalyzer = 336,
+        // obsolete: Diagnostics_BadAnalyzer = 336,
         CodeAnalysisService_ReportAnalyzerPerformance = 337,
         PerformanceTrackerService_AddSnapshot = 338,
         // obsolete: AbstractProject_SetIntelliSenseBuild = 339,
@@ -564,8 +564,33 @@ namespace Microsoft.CodeAnalysis.Internal.Log
         ApplyChangesOperation_WorkspaceVersionMismatch_ApplicationFailed_DocumentRemoved = 587,
         ApplyChangesOperation_WorkspaceVersionMismatch_ApplicationFailed_TextChangeConflict = 588,
 
+        Completion_SemanticSnippets = 589,
         // please leave the range up through 600 free in case we need to add more items to learn more about ApplyChangesOperation results.
 
-        Next = 600
+        SpellCheckFixer_CouldNotFindDocument = 600,
+        SpellCheckFixer_LanguageDoesNotSupportRename = 601,
+        SpellCheckFixer_LanguageCouldNotGetRenameInfo = 602,
+        SpellCheckFixer_RenameSpanNotWithinTokenSpan = 603,
+        SpellCheckFixer_ReplacementTextInvalid = 604,
+        SpellCheckFixer_TryApplyChangesFailure = 605,
+
+        SourceGenerator_SolutionStatistics = 620,
+        SourceGenerator_OtherWorkspaceSessionStatistics = 621,
+
+        // 630-650 for sqlite errors.
+        SQLite_SqlException = 630,
+        SQLite_StorageDisabled = 631,
+
+        // 650-660 for diagnostic/fix related ids.
+        Diagnostics_AnalyzerPerformanceInfo = 651,
+
+        // 660-670 for semantic model reuse service.
+        SemanticModelReuseLanguageService_TryGetSpeculativeSemanticModelAsync_Equivalent = 660,
+
+        // 670-680 for newer rename ids
+        Rename_TryApplyRename_WorkspaceChanged = 670,
+
+        // 680-690 LSP Initialization info ids.
+        LSP_Initialize = 680,
     }
 }
