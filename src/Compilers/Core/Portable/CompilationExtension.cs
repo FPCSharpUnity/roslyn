@@ -20,7 +20,7 @@ public abstract class ProcessCompilationBase : ISourceGenerator
         // Otherwise it would require a huge refactoring to add a new type that foes not extend ISourceGenerator.
     }
     void ISourceGenerator.Execute(GeneratorExecutionContext context) { }
-        
+
     /// <summary>
     /// Process compiler extension.
     /// </summary>

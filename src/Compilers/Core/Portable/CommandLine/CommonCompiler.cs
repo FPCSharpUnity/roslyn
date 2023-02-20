@@ -928,16 +928,13 @@ namespace Microsoft.CodeAnalysis
             }
 
             RunCompilationExtensions(
-                ref compilation, 
-                diagnostics, 
-                Arguments.BaseDirectory ?? "", 
+                ref compilation,
+                diagnostics,
+                Arguments.BaseDirectory ?? "",
                 allowFileTransformations: true,
                 generators
             );
-            
-            // At this point analyzers are already complete in which case this is a no-op.  Or they are
-            // still running because the compilation failed before all of the compilation events were
-            // raised.  In the latter case the driver, and all its associated state, will be waiting around
+
             if (ReportDiagnostics(diagnostics, consoleOutput, errorLogger, compilation)) return Failed;
 
             ImmutableArray<AnalyzerConfigOptionsResult> useMapping(Compilation compilation)
@@ -1026,10 +1023,12 @@ namespace Microsoft.CodeAnalysis
                     analyzerConfigOptionsResults,
                     embeddedTexts,
                     diagnostics,
+                    errorLogger,
                     cancellationToken,
                     out CancellationTokenSource? analyzerCts,
                     out analyzerDriver,
-                    out driverTimingInfo);
+                    out driverTimingInfo,
+                    compilationBeforeExtensions: compilationBeforeExtensions);
 
                 // At this point analyzers are already complete in which case this is a no-op.  Or they are 
                 // still running because the compilation failed before all of the compilation events were 
@@ -1045,7 +1044,8 @@ namespace Microsoft.CodeAnalysis
         private static void RunCompilationExtensions(
             ref Compilation compilation, DiagnosticBag diagnosticBag, string baseDirectory,
             bool allowFileTransformations, ImmutableArray<ISourceGenerator> generators
-        ) {
+        )
+        {
             var compilationProcessors = generators.OfType<ProcessCompilationBase>().ToArray();
             addDiagnostic(
                 ceiInfo(
@@ -1055,7 +1055,8 @@ namespace Microsoft.CodeAnalysis
             );
             foreach (var processCompilation in compilationProcessors)
             {
-                try {
+                try
+                {
                     addDiagnostic(
                         ceiInfo(
                             "CEI102",
@@ -1066,20 +1067,21 @@ namespace Microsoft.CodeAnalysis
                     diagnosticBag.AddRange(tpl.diagnostics);
                     compilation = tpl.newCompilation;
                 }
-                catch (Exception e) {
+                catch (Exception e)
+                {
                     addDiagnostic(ceiErr("CEI001", $"Exception processing {processCompilation.GetType().FullName}: {e}"));
                 }
             }
-            
+
             void addDiagnostic(Diagnostic diagnostic) => diagnosticBag.Add(diagnostic);
         }
-        
-        static Diagnostic ceiErr(string code, string msg, Location location = null) =>
+
+        static Diagnostic ceiErr(string code, string msg, Location? location = null) =>
             Diagnostic.Create(new DiagnosticDescriptor(
                 code, "Error", msg, "CompilationExtensionInterfaces", DiagnosticSeverity.Error, true
             ), location);
-        
-        static Diagnostic ceiInfo(string code, string msg, Location location = null) =>
+
+        static Diagnostic ceiInfo(string code, string msg, Location? location = null) =>
             Diagnostic.Create(new DiagnosticDescriptor(
                 code, "Info", msg, "CompilationExtensionInterfaces", DiagnosticSeverity.Info, true
             ), location);
@@ -1143,7 +1145,8 @@ namespace Microsoft.CodeAnalysis
             CancellationToken cancellationToken,
             out CancellationTokenSource? analyzerCts,
             out AnalyzerDriver? analyzerDriver,
-            out GeneratorDriverTimingInfo? generatorTimingInfo)
+            out GeneratorDriverTimingInfo? generatorTimingInfo,
+            Compilation compilationBeforeExtensions)
         {
             analyzerCts = null;
             analyzerDriver = null;
@@ -1188,18 +1191,26 @@ namespace Microsoft.CodeAnalysis
                     // !!!!!! EDITS !!!!!!
                     // This code uses a weird way to detect new files after code generation.
                     // It broke after we inserted our own generator.
-                    // But I fixed it by storing the number of file just before code generation and using that.
-                    var syntaxTreeCountBeforeGeneration = compilation.SyntaxTrees.Count();
+                    // But I fixed it by storing the number of files just before code generation and using that.
+                    // 
+                    // We also run codegen on compilationBeforeExtensions instead of the current compilation, because
+                    // otherwise codegen runs on .partials.cs and .transformed.cs files. It makes Unity 2022.2 codegen
+                    // to generate wrong info.
+                    var syntaxTreeCountBeforeGeneration = compilationBeforeExtensions.SyntaxTrees.Count();
 
                     // At this point we have a compilation with nothing yet computed.
                     // We pass it to the generators, which will realize any symbols they require.
-                    (compilation, generatorTimingInfo) = RunGenerators(compilation, Arguments.ParseOptions, generators, analyzerConfigProvider, additionalTextFiles, diagnostics);
+                    (var compilationAfterCodegen, generatorTimingInfo) = RunGenerators(compilationBeforeExtensions, Arguments.ParseOptions, generators, analyzerConfigProvider, additionalTextFiles, diagnostics);
 
                     bool hasAnalyzerConfigs = !Arguments.AnalyzerConfigPaths.IsEmpty;
                     bool hasGeneratedOutputPath = !string.IsNullOrWhiteSpace(Arguments.GeneratedFilesOutputDirectory);
-                    var generatedSyntaxTrees = compilation.SyntaxTrees.Skip(syntaxTreeCountBeforeGeneration).ToList();
+                    var generatedSyntaxTrees = compilationAfterCodegen.SyntaxTrees.Skip(syntaxTreeCountBeforeGeneration).ToList();
                     var analyzerOptionsBuilder = hasAnalyzerConfigs ? ArrayBuilder<AnalyzerConfigOptionsResult>.GetInstance(generatedSyntaxTrees.Count) : null;
                     var embeddedTextBuilder = ArrayBuilder<EmbeddedText>.GetInstance(generatedSyntaxTrees.Count);
+                    if (generatedSyntaxTrees.Count > 0)
+                    {
+                        compilation = compilation.AddSyntaxTrees(generatedSyntaxTrees);
+                    }
                     try
                     {
                         foreach (var tree in generatedSyntaxTrees)

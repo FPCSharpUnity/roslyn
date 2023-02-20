@@ -1,3 +1,6 @@
+abstract CompilationExtension.ProcessCompilationBase.process(Microsoft.CodeAnalysis.Compilation! compilation, System.Collections.Immutable.ImmutableArray<Microsoft.CodeAnalysis.ISourceGenerator!> generators, string! baseDirectory, bool allowFileTransformations) -> (System.Collections.Generic.IEnumerable<Microsoft.CodeAnalysis.Diagnostic!>! diagnostics, Microsoft.CodeAnalysis.Compilation! newCompilation)
+CompilationExtension.ProcessCompilationBase
+CompilationExtension.ProcessCompilationBase.ProcessCompilationBase() -> void
 Microsoft.CodeAnalysis.Compilation.SupportsRuntimeCapability(Microsoft.CodeAnalysis.RuntimeCapability capability) -> bool
 Microsoft.CodeAnalysis.OperationKind.Attribute = 125 -> Microsoft.CodeAnalysis.OperationKind
 Microsoft.CodeAnalysis.Operations.IAttributeOperation
