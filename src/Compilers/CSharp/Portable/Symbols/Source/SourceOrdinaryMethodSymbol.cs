@@ -175,8 +175,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // implemented.
                 if (syntax.ConstraintClauses.Count > 0)
                 {
-                    Binder.CheckFeatureAvailability(syntax.SyntaxTree, MessageID.IDS_OverrideWithConstraints, diagnostics,
-                                                    syntax.ConstraintClauses[0].WhereKeyword.GetLocation());
+                    Binder.CheckFeatureAvailability(
+                        syntax.ConstraintClauses[0].WhereKeyword, MessageID.IDS_OverrideWithConstraints, diagnostics);
 
                     declaredConstraints = signatureBinder.WithAdditionalFlags(BinderFlags.GenericConstraintsClause | BinderFlags.SuppressConstraintChecks).
                                               BindTypeParameterConstraintClauses(this, TypeParameters, syntax.TypeParameterList, syntax.ConstraintClauses,
@@ -291,6 +291,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             Debug.Assert(syntaxReferenceOpt != null);
             return (MethodDeclarationSyntax)syntaxReferenceOpt.GetSyntax();
+        }
+
+        internal override ExecutableCodeBinder TryGetBodyBinder(BinderFactory binderFactoryOpt = null, bool ignoreAccessibility = false)
+        {
+            return TryGetBodyBinderFromSyntax(binderFactoryOpt, ignoreAccessibility);
         }
 
         protected override void CompleteAsyncMethodChecksBetweenStartAndFinish()

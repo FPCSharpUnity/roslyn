@@ -231,6 +231,26 @@ namespace Microsoft.CodeAnalysis
         /// <typeparam name="TItem">Type of the source array items</typeparam>
         /// <typeparam name="TResult">Type of the transformed array items</typeparam>
         /// <param name="array">The array to transform</param>
+        /// <param name="selector">A transform function to apply to each element.</param>
+        /// <returns>If the array's length is 0, this will return an empty immutable array.</returns>
+        public static ImmutableArray<TResult> SelectManyAsArray<TItem, TResult>(this ImmutableArray<TItem> array, Func<TItem, IEnumerable<TResult>> selector)
+        {
+            if (array.Length == 0)
+                return ImmutableArray<TResult>.Empty;
+
+            var builder = ArrayBuilder<TResult>.GetInstance();
+            foreach (var item in array)
+                builder.AddRange(selector(item));
+
+            return builder.ToImmutableAndFree();
+        }
+
+        /// <summary>
+        /// Maps and flattens a subset of immutable array to another immutable array.
+        /// </summary>
+        /// <typeparam name="TItem">Type of the source array items</typeparam>
+        /// <typeparam name="TResult">Type of the transformed array items</typeparam>
+        /// <param name="array">The array to transform</param>
         /// <param name="predicate">The condition to use for filtering the array content.</param>
         /// <param name="selector">A transform function to apply to each element that is not filtered out by <paramref name="predicate"/>.</param>
         /// <returns>If the items's length is 0, this will return an empty immutable array.</returns>
@@ -758,7 +778,7 @@ namespace Microsoft.CodeAnalysis
             return builder.ToImmutableAndFree();
         }
 
-        internal static bool HasDuplicates<T>(this ImmutableArray<T> array, IEqualityComparer<T> comparer)
+        internal static bool HasDuplicates<T>(this ImmutableArray<T> array, IEqualityComparer<T>? comparer = null)
         {
             switch (array.Length)
             {
@@ -767,6 +787,7 @@ namespace Microsoft.CodeAnalysis
                     return false;
 
                 case 2:
+                    comparer ??= EqualityComparer<T>.Default;
                     return comparer.Equals(array[0], array[1]);
 
                 default:
