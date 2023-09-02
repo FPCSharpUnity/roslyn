@@ -84,6 +84,9 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
         public static string Option_run_code_analysis_in_separate_process
             => ServicesVSResources.Run_code_analysis_in_separate_process_requires_restart;
 
+        public static string Option_run_code_analysis_on_dotnet
+            => ServicesVSResources.Run_code_analysis_on_latest_dotnet_requires_restart;
+
         public static string Option_analyze_source_generated_files
             => ServicesVSResources.Analyze_source_generated_files;
 
@@ -251,6 +254,9 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
 
         public static string Option_Collapse_regions_when_collapsing_to_definitions
             => ServicesVSResources.Collapse_regions_when_collapsing_to_definitions;
+
+        public static string Option_Collapse_local_functions_when_collapsing_to_definitions
+            => ServicesVSResources.Collapse_local_functions_when_collapsing_to_definitions;
 
         public static string Option_Block_Structure_Guides
             => ServicesVSResources.Block_Structure_Guides;

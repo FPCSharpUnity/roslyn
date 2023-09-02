@@ -11,7 +11,7 @@ namespace Microsoft.CodeAnalysis.LanguageServer.Handler.Configuration
 {
     internal partial class DidChangeConfigurationNotificationHandler
     {
-        public async Task OnInitializedAsync(ClientCapabilities clientCapabilities, CancellationToken cancellationToken)
+        public async Task OnInitializedAsync(ClientCapabilities clientCapabilities, RequestContext context, CancellationToken cancellationToken)
         {
             if (clientCapabilities?.Workspace?.DidChangeConfiguration?.DynamicRegistration is true)
             {
@@ -27,6 +27,7 @@ namespace Microsoft.CodeAnalysis.LanguageServer.Handler.Configuration
                     cancellationToken).ConfigureAwait(false);
             }
 
+            _supportWorkspaceConfiguration = clientCapabilities?.Workspace?.Configuration ?? false;
             await RefreshOptionsAsync(cancellationToken).ConfigureAwait(false);
         }
     }
