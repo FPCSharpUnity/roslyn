@@ -6,12 +6,15 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
+using Microsoft.CodeAnalysis.CSharp.Extensions;
 using Microsoft.CodeAnalysis.CSharp.LanguageService;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.CodeAnalysis.UseCollectionInitializer;
 using Roslyn.Utilities;
 
@@ -25,6 +28,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
     : AbstractCSharpUseCollectionExpressionDiagnosticAnalyzer
 {
     private const string ToPrefix = "To";
+    private const string AsSpanName = "AsSpan";
 
     /// <summary>
     /// Standard names to look at for the final <c>ToXXX</c> method.  For example "ToList", "ToArray", "ToImmutable",
@@ -87,7 +91,8 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
             return;
         }
 
-        var analysisResult = AnalyzeInvocation(state, invocation, addMatches: true, cancellationToken);
+        var sourceText = semanticModel.SyntaxTree.GetText(cancellationToken);
+        var analysisResult = AnalyzeInvocation(sourceText, state, invocation, addMatches: true, cancellationToken);
         if (analysisResult is null)
             return;
 
@@ -106,6 +111,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
     /// <c>.Add(...)/.AddRange(...)</c> or <c>.ToXXX()</c> calls
     /// </summary>
     public static AnalysisResult? AnalyzeInvocation(
+        SourceText text,
         FluentState state,
         InvocationExpressionSyntax invocation,
         bool addMatches,
@@ -114,7 +120,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         // Because we're recursing from top to bottom in the expression tree, we build up the matches in reverse.  Right
         // before returning them, we'll reverse them again to get the proper order.
         using var _ = ArrayBuilder<CollectionExpressionMatch<ArgumentSyntax>>.GetInstance(out var matchesInReverse);
-        if (!AnalyzeInvocation(state, invocation, addMatches ? matchesInReverse : null, out var existingInitializer, cancellationToken))
+        if (!AnalyzeInvocation(text, state, invocation, addMatches ? matchesInReverse : null, out var existingInitializer, cancellationToken))
             return null;
 
         if (!CanReplaceWithCollectionExpression(state.SemanticModel, invocation, skipVerificationForReplacedNode: true, cancellationToken))
@@ -125,6 +131,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
     }
 
     private static bool AnalyzeInvocation(
+        SourceText text,
         FluentState state,
         InvocationExpressionSyntax invocation,
         ArrayBuilder<CollectionExpressionMatch<ArgumentSyntax>>? matchesInReverse,
@@ -153,6 +160,8 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         using var _1 = ArrayBuilder<ExpressionSyntax>.GetInstance(out var stack);
         stack.Push(memberAccess.Expression);
 
+        var copiedData = false;
+
         while (stack.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -164,6 +173,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
             if (current is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax currentMemberAccess } currentInvocation &&
                 IsSyntacticMatch(state, currentMemberAccess, currentInvocation, allowLinq: true, matchesInReverse, out _, cancellationToken))
             {
+                copiedData = true;
                 stack.Push(currentMemberAccess.Expression);
                 continue;
             }
@@ -230,12 +240,20 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
                 return true;
             }
 
+            // If we're bottomed out at some different type of expression, and we started with an AsSpan, and we did not
+            // perform a copy of the data, then do not convert this.  The above cases produce a fresh-collection (an
+            // rvalue), which is fine to get a span out of.  However, this may be wrapping a *non-fresh* (an lvalue)
+            // collection.  That means the user could mutate the underlying data the span wraps.  Since we are
+            // converting to a form that will create a fresh collection, that could be noticeable.
+            if (memberAccess.Name.Identifier.ValueText == AsSpanName && !copiedData)
+                return false;
+
             // Down to some final collection.  Like `x` in `x.Concat(y).ToArray()`.  If `x` is itself is something that
             // can be iterated, we can convert this to `[.. x, .. y]`.  Note: we only want to do this if ending with one
             // of the ToXXX Methods.  If we just have `x.AddRange(y)` it's preference to keep that, versus `[.. x, ..y]`
             if (!isAdditionMatch && IsIterable(current))
             {
-                matchesInReverse?.Add(new CollectionExpressionMatch<ArgumentSyntax>(SyntaxFactory.Argument(current), UseSpread: true));
+                AddFinalMatch(current);
                 return true;
             }
 
@@ -244,6 +262,36 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         }
 
         return false;
+
+        void AddFinalMatch(ExpressionSyntax expression)
+        {
+            if (matchesInReverse is null)
+                return;
+
+            // We're only adding one item to the final collection.  So we're ending up with `[.. <expr>]`.  If this
+            // originally was wrapped over multiple lines in a fluent fashion, and we're down to just a single wrapped
+            // line, then unwrap.
+            if (matchesInReverse.Count == 0 &&
+                expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess } innerInvocation &&
+                text.Lines.GetLineFromPosition(expression.SpanStart).LineNumber + 1 == text.Lines.GetLineFromPosition(expression.Span.End).LineNumber &&
+                memberAccess.Expression.GetTrailingTrivia()
+                    .Concat(memberAccess.OperatorToken.GetAllTrivia())
+                    .Concat(memberAccess.Name.GetLeadingTrivia())
+                    .All(static t => t.IsWhitespaceOrEndOfLine()))
+            {
+                // Remove any whitespace around the `.`, making the singly-wrapped fluent expression into a single line.
+                matchesInReverse.Add(new CollectionExpressionMatch<ArgumentSyntax>(
+                    SyntaxFactory.Argument(innerInvocation.WithExpression(
+                        memberAccess.Update(
+                            memberAccess.Expression.WithoutTrailingTrivia(),
+                            memberAccess.OperatorToken.WithoutTrivia(),
+                            memberAccess.Name.WithoutLeadingTrivia()))),
+                    UseSpread: true));
+                return;
+            }
+
+            matchesInReverse.Add(new CollectionExpressionMatch<ArgumentSyntax>(SyntaxFactory.Argument(expression), UseSpread: true));
+        }
 
         // We only want to offer this feature when the original collection was list-like (as opposed to being something
         // like a hash-set).  For example: `new List<int> { x, y, z }.ToImmutableArray()` produces different results
@@ -352,7 +400,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
 
         static bool IsAnyNameMatch(string name)
         {
-            if (name == "AsSpan")
+            if (name == AsSpanName)
                 return true;
 
             if (!name.StartsWith(ToPrefix, StringComparison.Ordinal))

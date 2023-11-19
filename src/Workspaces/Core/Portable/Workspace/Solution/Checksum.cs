@@ -7,11 +7,11 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
+using Microsoft.CodeAnalysis.Serialization;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis
@@ -22,12 +22,12 @@ namespace Microsoft.CodeAnalysis
     /// </summary>
     [DataContract]
     internal sealed partial record class Checksum(
-        [property: DataMember(Order = 0)] Checksum.HashData Hash) : IObjectWritable
+        [property: DataMember(Order = 0)] Checksum.HashData Hash)
     {
         /// <summary>
         /// The intended size of the <see cref="HashData"/> structure. 
         /// </summary>
-        public const int HashSize = 20;
+        public const int HashSize = 16;
 
         public static readonly Checksum Null = new(Hash: default);
 
@@ -83,8 +83,6 @@ namespace Microsoft.CodeAnalysis
         public override string ToString()
             => ToBase64String();
 
-        bool IObjectWritable.ShouldReuseInSerialization => true;
-
         public void WriteTo(ObjectWriter writer)
             => Hash.WriteTo(writer);
 
@@ -102,6 +100,18 @@ namespace Microsoft.CodeAnalysis
         public static Func<IEnumerable<Checksum>, string> GetChecksumsLogInfo { get; }
             = checksums => string.Join("|", checksums.Select(c => c.ToString()));
 
+        public static Func<ProjectStateChecksums, string> GetProjectChecksumsLogInfo { get; }
+            = checksums => checksums.Checksum.ToString();
+
+        // Explicitly implement this method as default jit for records on netfx doesn't properly devirtualize the
+        // standard calls to EqualityComparer<HashData>.Default.Equals
+        public bool Equals(Checksum other)
+            => other != null && Hash.Equals(other.Hash);
+
+        // Directly call into Hash to avoid any overhead that records add when hashing things like the EqualityContract
+        public override int GetHashCode()
+            => Hash.GetHashCode();
+
         /// <summary>
         /// This structure stores the 20-byte hash as an inline value rather than requiring the use of
         /// <c>byte[]</c>.
@@ -109,33 +119,44 @@ namespace Microsoft.CodeAnalysis
         [DataContract, StructLayout(LayoutKind.Explicit, Size = HashSize)]
         public readonly record struct HashData(
             [field: FieldOffset(0)][property: DataMember(Order = 0)] long Data1,
-            [field: FieldOffset(8)][property: DataMember(Order = 1)] long Data2,
-            [field: FieldOffset(16)][property: DataMember(Order = 2)] int Data3)
+            [field: FieldOffset(8)][property: DataMember(Order = 1)] long Data2)
         {
             public void WriteTo(ObjectWriter writer)
             {
                 writer.WriteInt64(Data1);
                 writer.WriteInt64(Data2);
-                writer.WriteInt32(Data3);
             }
 
             public void WriteTo(Span<byte> span)
             {
-                Contract.ThrowIfFalse(span.Length >= HashSize);
+                Contract.ThrowIfTrue(span.Length < HashSize);
+#pragma warning disable CS9191 // The 'ref' modifier for an argument corresponding to 'in' parameter is equivalent to 'in'. Consider using 'in' instead.
                 Contract.ThrowIfFalse(MemoryMarshal.TryWrite(span, ref Unsafe.AsRef(in this)));
+#pragma warning restore CS9191
             }
 
-            public static unsafe HashData FromPointer(HashData* hash)
-                => new(hash->Data1, hash->Data2, hash->Data3);
-
             public static HashData ReadFrom(ObjectReader reader)
-                => new(reader.ReadInt64(), reader.ReadInt64(), reader.ReadInt32());
+                => new(reader.ReadInt64(), reader.ReadInt64());
 
             public override int GetHashCode()
             {
                 // The checksum is already a hash. Just read a 4-byte value to get a well-distributed hash code.
                 return (int)Data1;
             }
+
+            // Explicitly implement this method as default jit for records on netfx doesn't properly devirtualize the
+            // standard calls to EqualityComparer<long>.Default.Equals
+            public bool Equals(HashData other)
+                => this.Data1 == other.Data1 && this.Data2 == other.Data2;
+        }
+    }
+
+    internal static class ChecksumExtensions
+    {
+        public static void AddIfNotNullChecksum(this HashSet<Checksum> checksums, Checksum checksum)
+        {
+            if (checksum != Checksum.Null)
+                checksums.Add(checksum);
         }
     }
 }
