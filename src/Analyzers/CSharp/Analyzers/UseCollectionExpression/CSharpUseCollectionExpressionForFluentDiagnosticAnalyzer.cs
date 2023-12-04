@@ -24,8 +24,10 @@ using static UseCollectionExpressionHelpers;
 using FluentState = UpdateExpressionState<ExpressionSyntax, StatementSyntax>;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
-internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAnalyzer
-    : AbstractCSharpUseCollectionExpressionDiagnosticAnalyzer
+internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAnalyzer()
+    : AbstractCSharpUseCollectionExpressionDiagnosticAnalyzer(
+        IDEDiagnosticIds.UseCollectionExpressionForFluentDiagnosticId,
+        EnforceOnBuildValues.UseCollectionExpressionForFluent)
 {
     private const string ToPrefix = "To";
     private const string AsSpanName = "AsSpan";
@@ -57,23 +59,17 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         nameof(ImmutableStack<int>),
         nameof(System.Collections.Immutable));
 
-    public CSharpUseCollectionExpressionForFluentDiagnosticAnalyzer()
-        : base(IDEDiagnosticIds.UseCollectionExpressionForFluentDiagnosticId,
-               EnforceOnBuildValues.UseCollectionExpressionForFluent)
-    {
-    }
+    protected override void InitializeWorker(CodeBlockStartAnalysisContext<SyntaxKind> context, INamedTypeSymbol? expressionType)
+        => context.RegisterSyntaxNodeAction(context => AnalyzeMemberAccess(context, expressionType), SyntaxKind.SimpleMemberAccessExpression);
 
-    protected override void InitializeWorker(CodeBlockStartAnalysisContext<SyntaxKind> context)
-        => context.RegisterSyntaxNodeAction(AnalyzeMemberAccess, SyntaxKind.SimpleMemberAccessExpression);
-
-    private void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context)
+    private void AnalyzeMemberAccess(SyntaxNodeAnalysisContext context, INamedTypeSymbol? expressionType)
     {
         var semanticModel = context.SemanticModel;
         var cancellationToken = context.CancellationToken;
 
         // no point in analyzing if the option is off.
         var option = context.GetAnalyzerOptions().PreferCollectionExpression;
-        if (!option.Value)
+        if (!option.Value || ShouldSkipAnalysis(context, option.Notification))
             return;
 
         var memberAccess = (MemberAccessExpressionSyntax)context.Node;
@@ -92,14 +88,14 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         }
 
         var sourceText = semanticModel.SyntaxTree.GetText(cancellationToken);
-        var analysisResult = AnalyzeInvocation(sourceText, state, invocation, addMatches: true, cancellationToken);
+        var analysisResult = AnalyzeInvocation(sourceText, state, invocation, expressionType, addMatches: true, cancellationToken);
         if (analysisResult is null)
             return;
 
         context.ReportDiagnostic(DiagnosticHelper.Create(
             Descriptor,
             memberAccess.Name.Identifier.GetLocation(),
-            option.Notification.Severity,
+            option.Notification,
             additionalLocations: ImmutableArray.Create(invocation.GetLocation()),
             properties: null));
 
@@ -114,6 +110,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         SourceText text,
         FluentState state,
         InvocationExpressionSyntax invocation,
+        INamedTypeSymbol? expressionType,
         bool addMatches,
         CancellationToken cancellationToken)
     {
@@ -123,7 +120,7 @@ internal sealed partial class CSharpUseCollectionExpressionForFluentDiagnosticAn
         if (!AnalyzeInvocation(text, state, invocation, addMatches ? matchesInReverse : null, out var existingInitializer, cancellationToken))
             return null;
 
-        if (!CanReplaceWithCollectionExpression(state.SemanticModel, invocation, skipVerificationForReplacedNode: true, cancellationToken))
+        if (!CanReplaceWithCollectionExpression(state.SemanticModel, invocation, expressionType, skipVerificationForReplacedNode: true, cancellationToken))
             return null;
 
         matchesInReverse.ReverseContents();
